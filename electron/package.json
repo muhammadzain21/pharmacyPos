@@ -1,0 +1,35 @@
+{
+  "name": "dawa-khanah-electron",
+  "version": "1.0.0",
+  "description": "Electron wrapper for Dawa Khanah React app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "22.3.27",
+    "electron-builder": "23.6.0"
+  },
+  "build": {
+    "win": {
+      "target": "nsis",
+      "signingHashAlgorithms": ["sha1", "sha256"]
+    },
+    "appId": "com.mindspire.pharmacy.pos",
+    "productName": "Mindspire Pharmacy POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    }
+  }
+}

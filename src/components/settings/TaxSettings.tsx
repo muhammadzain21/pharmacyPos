@@ -1,12 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
-import { taxService } from '@/services/taxService';
-
+// TaxSettings is now deprecated. Please use the main Settings page for all tax-related configuration.
 export function TaxSettings() {
   const [taxConfig, setTaxConfig] = useState(taxService.getTaxConfig());
   const { toast } = useToast();

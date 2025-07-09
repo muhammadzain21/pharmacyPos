@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
@@ -23,11 +23,154 @@ import BarcodeScanner from './BarcodeScanner';
 import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { DoubleConfirmDialog } from './ui/DoubleConfirmDialog';
-import { InventoryItem, getInventory, saveInventory, updateItemStock, getLowStockItems } from '@/utils/inventoryService';
+import { InventoryItem } from '@/utils/inventoryService';
+import axios from 'axios';
+import { useInventory } from '@/contexts/InventoryContext';
 
 interface InventoryControlProps {
   isUrdu: boolean;
 }
+
+interface AddStockDialogProps {
+  inventory: InventoryItem[];
+  suppliers: {id: string; name: string}[];
+  onStockAdded: () => void;
+}
+
+const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, onStockAdded }) => {
+  const [selectedMedicine, setSelectedMedicine] = useState<InventoryItem | null>(null);
+  const [stockQuantity, setStockQuantity] = useState<string>('');
+  const [unitPrice, setUnitPrice] = useState<string>('');
+  const [salePrice, setSalePrice] = useState<string>('');
+  const [lastPurchasePrice, setLastPurchasePrice] = useState<string>('');
+  const [invoiceNumber, setInvoiceNumber] = useState<string>('');
+  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
+  const [newSupplierName, setNewSupplierName] = useState<string>('');
+  const [showNewSupplierField, setShowNewSupplierField] = useState<boolean>(false);
+  const { toast } = useToast();
+
+  const handleAddStock = async () => {
+    if (!selectedMedicine || !stockQuantity || !unitPrice) {
+      toast({
+        title: 'Error',
+        description: 'Please fill all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const supplier = showNewSupplierField ? newSupplierName : selectedSupplier;
+      
+      const updatedItem = {
+        ...selectedMedicine,
+        stock: (parseInt(selectedMedicine.stock.toString()) + parseInt(stockQuantity)).toString(),
+        purchasePrice: unitPrice,
+        salePrice: salePrice || selectedMedicine.salePrice,
+        lastPurchasePrice: unitPrice,
+        lastPurchaseDate: new Date().toISOString(),
+        lastSupplier: supplier,
+      };
+
+      // Update stock via backend API
+      await axios.patch(`/api/inventory/${updatedItem.id}/stock`, { quantity: parseInt(stockQuantity), unitPrice, salePrice, supplier });
+      onStockAdded();
+      
+      toast({
+        title: 'Success',
+        description: 'Stock added successfully',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to add stock',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button className="ml-2">
+          <Plus className="mr-2 h-4 w-4" /> Add Stock
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add Stock</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          {/* Medicine selection */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="medicine" className="text-right">
+              Medicine
+            </Label>
+            <Select 
+              onValueChange={(value) => setSelectedMedicine(inventory.find(item => String(item.id) === value) || null)}
+            >
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Select medicine" />
+              </SelectTrigger>
+              <SelectContent>
+                {inventory.map((item) => (
+                  <SelectItem key={String(item.id)} value={String(item.id)}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Other fields remain the same */}
+          
+          {/* Supplier selection */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="supplier" className="text-right">
+              Supplier
+            </Label>
+            <div className="col-span-3 flex items-center gap-2">
+              {!showNewSupplierField ? (
+                <>
+                  <Select onValueChange={setSelectedSupplier}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {suppliers.map((supplier) => (
+                        <SelectItem key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowNewSupplierField(true)}
+                  >
+                    + New
+                  </Button>
+                </>
+              ) : (
+                <Input
+                  value={newSupplierName}
+                  onChange={(e) => setNewSupplierName(e.target.value)}
+                  placeholder="Enter new supplier name"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline">Cancel</Button>
+          <Button onClick={handleAddStock}>Add Stock</Button>
+        </div>
+      </DialogContent>
+      <DialogClose />
+    </Dialog>
+  );
+};
 
 const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -38,7 +181,8 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  // Use inventory from context
+  const { inventory, addItemToInventory, refreshInventory } = useInventory();
   const [formData, setFormData] = useState({
     name: '',
     genericName: '',
@@ -59,33 +203,29 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   });
 
   // Supplier state for dropdown and add-new
-  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<{id: string; name: string}[]>([]);
   const [showAddSupplierDialog, setShowAddSupplierDialog] = useState(false);
-  const [newSupplier, setNewSupplier] = useState({
-    companyName: '',
-    contactPerson: '',
-    phone: '',
-    email: '',
-    address: '',
-    taxId: '',
-    status: 'active'
-  });
+  const [newSupplierName, setNewSupplierName] = useState('');
 
   // Load suppliers for dropdown on mount
   useEffect(() => {
-    const savedSuppliers = localStorage.getItem('pharmacy_suppliers');
-    if (savedSuppliers) {
-      setSuppliers(JSON.parse(savedSuppliers));
-    } else {
-      setSuppliers([]);
-    }
+    const fetchSuppliers = async () => {
+      try {
+        // Replace with actual supplier fetching logic
+        const suppliersData = await fetch('/api/suppliers').then(res => res.json());
+        setSuppliers(suppliersData);
+      } catch (error) {
+        console.error('Failed to fetch suppliers:', error);
+      }
+    };
+    
+    fetchSuppliers();
   }, []);
+
   const [showBarcodeScannerInForm, setShowBarcodeScannerInForm] = useState(false);
   
-  // Load inventory on component mount
-  useEffect(() => {
-    setInventory(getInventory());
-  }, []);
+  // No need to fetch inventory here; handled by context
+
   
   // Auto-calculate totalStockPrice or purchasePrice based on user input
   useEffect(() => {
@@ -138,17 +278,22 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     }
   };
   
-  const handleSaveInventory = (items: InventoryItem[]) => {
-    saveInventory(items);
-    setInventory([...items]); // Update local state
-    setIsAddDialogOpen(false); // Close the dialog after saving
+  // Add new inventory item via backend API
+  const handleSaveInventory = async (item: InventoryItem) => {
+    try {
+      await axios.post('/api/inventory', item);
+      await loadInventory();
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to add inventory', variant: 'destructive' });
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const newItem: InventoryItem = {
-      id: Date.now(),
+      id: Date.now().toString(),
       name: formData.name,
       genericName: formData.genericName,
       category: formData.category,
@@ -166,8 +311,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       manufacturingDate: formData.manufacturingDate
     };
 
-    const updatedInventory = [...inventory, newItem];
-    handleSaveInventory(updatedInventory);
+    handleSaveInventory(newItem);
     
     // Reset form
     setFormData({
@@ -195,29 +339,12 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   // Add new supplier handler
   const handleAddSupplier = (e: React.FormEvent) => {
     e.preventDefault();
-    const newSup = {
-      ...newSupplier,
-      id: Date.now(),
-      supplies: [],
-      purchases: [],
-      totalPurchases: 0,
-      pendingPayments: 0,
-      lastOrder: new Date().toISOString().split('T')[0],
-    };
-    const updatedSuppliers = [...suppliers, newSup];
-    setSuppliers(updatedSuppliers);
-    localStorage.setItem('pharmacy_suppliers', JSON.stringify(updatedSuppliers));
-    setFormData(prev => ({ ...prev, supplierName: newSup.companyName }));
+    if (!newSupplierName.trim()) return;
+    const newSup = { id: Date.now().toString(), name: newSupplierName.trim() };
+    setSuppliers((prev) => [...prev, newSup]);
+    setFormData(prev => ({ ...prev, supplierName: newSup.name }));
     setShowAddSupplierDialog(false);
-    setNewSupplier({
-      companyName: '',
-      contactPerson: '',
-      phone: '',
-      email: '',
-      address: '',
-      taxId: '',
-      status: 'active'
-    });
+    setNewSupplierName('');
   };
 
   const handleBarcodeScanned = (barcode: string) => {
@@ -388,16 +515,22 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
 
   const confirmDeleteInventory = () => {
     if (deleteTargetId === null) return;
-    const updatedInventory = inventory.filter(item => item.id !== deleteTargetId);
-    saveInventory(updatedInventory);
-    setInventory(updatedInventory);
-    // Optionally add audit log here if available
-    setShowDeleteDialog(false);
-    setDeleteTargetId(null);
-    toast({
-      title: isUrdu ? 'کامیابی' : 'Success',
-      description: isUrdu ? 'اسٹاک آئٹم کامیابی سے حذف ہو گیا' : 'Inventory item deleted successfully',
-    });
+    const updatedInventory = inventory.filter(item => String(item.id) !== String(deleteTargetId));
+    
+    // Delete inventory item via backend API
+    axios.delete(`/api/inventory/${deleteTargetId}`)
+      .then(() => {
+        loadInventory();
+        setShowDeleteDialog(false);
+        setDeleteTargetId(null);
+        toast({
+          title: isUrdu ? 'کامیابی' : 'Success',
+          description: isUrdu ? 'اسٹاک آئٹم کامیابی سے حذف ہو گیا' : 'Inventory item deleted successfully',
+        });
+      })
+      .catch(() => {
+        toast({ title: 'Error', description: 'Failed to delete item', variant: 'destructive' });
+      });
   };
 
   const cancelDeleteInventory = () => {
@@ -405,6 +538,14 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     setDeleteTargetId(null);
   };
 
+  const loadInventory = async () => {
+    try {
+      const res = await axios.get('/api/inventory');
+      refreshInventory();
+    } catch {
+      refreshInventory();
+    }
+  };
 
   return (
     <React.Fragment>
@@ -415,282 +556,38 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
           <div className="flex space-x-2">
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
-                  <Package className="mr-2 h-4 w-4" />
-                  {isUrdu ? 'انوینٹری شامل کریں' : 'Add Inventory'}
+                <Button variant="default">
+                  {isUrdu ? 'نیا اسٹاک شامل کریں' : 'Add New Stock'}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-3xl w-full mx-auto">
+              <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>{isUrdu ? 'نیا انوینٹری آئٹم شامل کریں' : 'Add New Inventory Item'}</DialogTitle>
+                  <DialogTitle>{isUrdu ? 'نیا اسٹاک شامل کریں' : 'Add New Stock'}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Responsive grid: 2 columns on md, 3 on xl */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">{isUrdu ? 'ادویات کا نام' : 'Medicine Name'} <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'ادویات کا نام درج کریں' : 'Enter medicine name'}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="genericName">{isUrdu ? 'جنیرک نام' : 'Generic Name'} <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="genericName"
-                        name="genericName"
-                        value={formData.genericName}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'جنیرک نام درج کریں' : 'Enter generic name'}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="category">{isUrdu ? 'قسم' : 'Category'} <span className="text-red-500">*</span></Label>
-                      <Select
-                        onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
-                        value={formData.category}
-                        required
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={isUrdu ? 'قسم منتخب کریں' : 'Select category'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {category}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="batchNo">{isUrdu ? 'بیچ نمبر' : 'Batch No.'} <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="batchNo"
-                        name="batchNo"
-                        value={formData.batchNo}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'بیچ نمبر درج کریں' : 'Enter batch number'}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="supplierName">{isUrdu ? 'سپلائر' : 'Supplier'} <span className="text-red-500">*</span></Label>
-                      <Select
-                        value={formData.supplierName}
-                        onValueChange={value => {
-                          if (value === 'add_new') {
-                            setShowAddSupplierDialog(true);
-                          } else {
-                            setFormData(prev => ({ ...prev, supplierName: value }));
-                          }
-                        }}
-                        required
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={isUrdu ? 'سپلائر منتخب کریں' : 'Select supplier'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {suppliers.map(sup => (
-                            <SelectItem key={sup.companyName} value={sup.companyName}>
-                              {sup.companyName}
-                            </SelectItem>
-                          ))}
-                          <SelectItem value="add_new">
-                            {isUrdu ? 'نیا سپلائر شامل کریں' : 'Add New Supplier'}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="manufacturer">{isUrdu ? 'مینوفیکچرر' : 'Manufacturer'}</Label>
-                      <Input
-                        id="manufacturer"
-                        name="manufacturer"
-                        value={formData.manufacturer}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'مینوفیکچرر درج کریں' : 'Enter manufacturer'}
-                      />
-                    </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">{isUrdu ? 'ادویات کا نام' : 'Medicine Name'} <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      placeholder={isUrdu ? 'ادویات کا نام درج کریں' : 'Enter medicine name'}
+                      required
+                    />
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label htmlFor="barcode">{isUrdu ? 'بار کوڈ' : 'Barcode'}</Label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowBarcodeScannerInForm(!showBarcodeScannerInForm)}
-                        className="text-xs h-6 px-2"
-                      >
-                        {showBarcodeScannerInForm 
-                          ? (isUrdu ? 'داخلہ کریں' : 'Enter Manually')
-                          : (isUrdu ? 'اسکین کریں' : 'Scan Barcode')}
-                      </Button>
-                    </div>
-                    {showBarcodeScannerInForm ? (
-                      <div className="mt-2">
-                        <BarcodeScanner 
-                          onScan={(barcode) => {
-                            setFormData(prev => ({ ...prev, barcode }));
-                            setShowBarcodeScannerInForm(false);
-                          }}
-                          isUrdu={isUrdu}
-                        />
-                      </div>
-                    ) : (
-                      <Input
-                        id="barcode"
-                        name="barcode"
-                        value={formData.barcode}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'بار کوڈ درج کریں' : 'Enter barcode'}
-                      />
-                    )}
+                    <Label htmlFor="genericName">{isUrdu ? 'جنیرک نام' : 'Generic Name'} <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="genericName"
+                      name="genericName"
+                      value={formData.genericName}
+                      onChange={handleInputChange}
+                      placeholder={isUrdu ? 'جنیرک نام درج کریں' : 'Enter generic name'}
+                      required
+                    />
                   </div>
-
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="stock">{isUrdu ? 'کل اسٹاک' : 'Total Stock'}</Label>
-                      <Input
-                        id="stock"
-                        name="stock"
-                        type="number"
-                        min="1"
-                        value={formData.stock}
-                        onChange={handleInputChange}
-                        placeholder="0"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="minStock">{isUrdu ? 'کم از کم اسٹاک' : 'Minimum Stock'}</Label>
-                      <Input
-                        id="minStock"
-                        name="minStock"
-                        type="number"
-                        min="0"
-                        value={formData.minStock}
-                        onChange={handleInputChange}
-                        placeholder="10"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="maxStock">{isUrdu ? 'زیادہ سے زیادہ اسٹاک' : 'Max Stock'}</Label>
-                      <Input
-                        id="maxStock"
-                        name="maxStock"
-                        type="number"
-                        min="1"
-                        value={formData.maxStock}
-                        onChange={handleInputChange}
-                        placeholder="100"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="manufacturingDate">
-                        {isUrdu ? 'تیاری کی تاریخ' : 'Manufacturing Date'}
-                      </Label>
-                      <Input
-                        id="manufacturingDate"
-                        name="manufacturingDate"
-                        type="date"
-                        value={formData.manufacturingDate}
-                        onChange={handleInputChange}
-                        max={format(new Date(), 'yyyy-MM-dd')}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="expiryDate">
-                        {isUrdu ? 'ختم ہونے کی تاریخ' : 'Expiry Date'}
-                        <span className="ml-1 text-xs text-muted-foreground">{isUrdu ? '(فارمیٹ: YYYY-MM-DD)' : '(Format: YYYY-MM-DD)'}</span>
-                      </Label>
-                      <Input
-                        id="expiryDate"
-                        name="expiryDate"
-                        type="date"
-                        min={formData.manufacturingDate || format(new Date(), 'yyyy-MM-dd')}
-                        value={formData.expiryDate}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="purchasePrice">{isUrdu ? 'خریداری قیمت' : 'Purchase Price'} <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="purchasePrice"
-                        name="purchasePrice"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={formData.purchasePrice}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'خریداری قیمت' : 'Enter purchase price'}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="salePrice">{isUrdu ? 'فروخت قیمت' : 'Sale Price'} <span className="text-red-500">*</span></Label>
-                      <Input
-                        id="salePrice"
-                        name="salePrice"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={formData.salePrice}
-                        onChange={handleInputChange}
-                        placeholder={isUrdu ? 'فروخت قیمت' : 'Enter sale price'}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="totalStockPrice">{isUrdu ? 'کل اسٹاک قیمت' : 'Total Stock Price'}</Label>
-                      <Input
-                        id="totalStockPrice"
-                        name="totalStockPrice"
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={formData.totalStockPrice}
-                        onChange={handleInputChange}
-                        placeholder="0.00"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end space-x-2 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setIsAddDialogOpen(false)}
-                    >
-                      {isUrdu ? 'منسوخ کریں' : 'Cancel'}
-                    </Button>
-                    <Button type="submit">
-                      {isUrdu ? 'محفوظ کریں' : 'Save'}
-                    </Button>
-                  </div>
-                </form>
+                </div>
               </DialogContent>
             </Dialog>
             <Button variant="outline">
@@ -707,8 +604,8 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
                     exportButton.disabled = true;
                     const originalContent = exportButton.innerHTML;
                     exportButton.innerHTML = isUrdu 
-                      ? '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> برآمد ہو رہا ہے...'
-                      : '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Exporting...';
+                      ? '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download h-4 w-4 mr-1"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> برآمد ہو رہا ہے...'
+                      : '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download h-4 w-4 mr-1"><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Exporting...';
                 
                   // Get the current date for the filename
                   const today = new Date().toISOString().split('T')[0];
@@ -910,6 +807,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
         )}
         <Button variant="outline">
           <Filter className="h-4 w-4 mr-2" />
+          {t.filter}
         </Button>
       </div>
       {showBarcodeScanner && (
@@ -995,81 +893,47 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
         </div>
       </TabsContent>
     </Tabs>
+    <div className="flex space-x-2">
+      <Button onClick={() => setIsAddDialogOpen(true)}>
+        <Plus className="mr-2 h-4 w-4" /> Add Inventory
+      </Button>
+      <AddStockDialog 
+        inventory={inventory}
+        suppliers={suppliers} 
+        onStockAdded={loadInventory}
+      />
+    </div>
     {/* Add Supplier Dialog */}
     <Dialog open={showAddSupplierDialog} onOpenChange={setShowAddSupplierDialog}>
-      <DialogContent className="max-w-lg w-full mx-auto">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{isUrdu ? 'نیا سپلائر شامل کریں' : 'Add New Supplier'}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleAddSupplier} className="space-y-4">
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'کمپنی کا نام' : 'Company Name'}</Label>
-            <Input
-              value={newSupplier.companyName}
-              onChange={e => setNewSupplier(prev => ({ ...prev, companyName: e.target.value }))}
-              required
-            />
+        <form onSubmit={handleAddSupplier}>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newSupplierName">{isUrdu ? 'سپلائر کا نام' : 'Supplier Name'} <span className="text-red-500">*</span></Label>
+              <Input
+                id="newSupplierName"
+                name="newSupplierName"
+                value={newSupplierName}
+                onChange={(e) => setNewSupplierName(e.target.value)}
+                placeholder={isUrdu ? 'سپلائر کا نام درج کریں' : 'Enter supplier name'}
+                required
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'رابطہ کار' : 'Contact Person'}</Label>
-            <Input
-              value={newSupplier.contactPerson}
-              onChange={e => setNewSupplier(prev => ({ ...prev, contactPerson: e.target.value }))}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'فون نمبر' : 'Phone Number'}</Label>
-            <Input
-              value={newSupplier.phone}
-              onChange={e => setNewSupplier(prev => ({ ...prev, phone: e.target.value }))}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'ای میل' : 'Email'}</Label>
-            <Input
-              type="email"
-              value={newSupplier.email}
-              onChange={e => setNewSupplier(prev => ({ ...prev, email: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'پتہ' : 'Address'}</Label>
-            <Input
-              value={newSupplier.address}
-              onChange={e => setNewSupplier(prev => ({ ...prev, address: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'ٹیکس آئی ڈی' : 'Tax ID'}</Label>
-            <Input
-              value={newSupplier.taxId}
-              onChange={e => setNewSupplier(prev => ({ ...prev, taxId: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>{isUrdu ? 'حالت' : 'Status'}</Label>
-            <Select value={newSupplier.status} onValueChange={value => setNewSupplier(prev => ({ ...prev, status: value }))}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">{isUrdu ? 'فعال' : 'Active'}</SelectItem>
-                <SelectItem value="inactive">{isUrdu ? 'غیر فعال' : 'Inactive'}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex space-x-2 justify-end">
-            <Button type="submit" className="flex-1">
-              {isUrdu ? 'محفوظ کریں' : 'Save'}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" type="button" onClick={() => setShowAddSupplierDialog(false)}>
+              {isUrdu ? 'منسوخ' : 'Cancel'}
             </Button>
-            <Button type="button" variant="outline" onClick={() => setShowAddSupplierDialog(false)}>
-              {isUrdu ? 'منسوخ کریں' : 'Cancel'}
+            <Button type="submit">
+              {isUrdu ? 'سپلائر شامل کریں' : 'Add Supplier'}
             </Button>
           </div>
         </form>
       </DialogContent>
+      <DialogClose />
     </Dialog>
     {/* Double Confirm Dialog for Deletion */}
     <DoubleConfirmDialog

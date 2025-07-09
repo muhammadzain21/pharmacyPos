@@ -4,7 +4,7 @@ import path from 'path';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
@@ -20,5 +20,8 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     open: true,
+    proxy: {
+      '/api': 'http://localhost:5000'
+    }
   },
 })

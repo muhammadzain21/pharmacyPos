@@ -222,9 +222,10 @@ const Settings: React.FC<SettingsProps> = ({ isUrdu, setIsUrdu }) => {
       </div>
 
       <Tabs defaultValue="company" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="company">{t.company}</TabsTrigger>
           <TabsTrigger value="system">{t.system}</TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="notifications">{t.notifications}</TabsTrigger>
           <TabsTrigger value="backup">{t.backup}</TabsTrigger>
         </TabsList>
@@ -286,12 +287,32 @@ const Settings: React.FC<SettingsProps> = ({ isUrdu, setIsUrdu }) => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
+                  <Label>Enable Tax</Label>
+                  <Switch
+                    checked={settings.taxEnabled ?? true}
+                    onCheckedChange={(checked) => setSettings({...settings, taxEnabled: checked})}
+                  />
+                </div>
+                <div>
                   <Label>{t.taxRate}</Label>
                   <Input
                     type="number"
                     value={settings.taxRate}
                     onChange={(e) => setSettings({...settings, taxRate: e.target.value})}
+                    disabled={!settings.taxEnabled}
                   />
+                </div>
+                <div>
+                  <Label>Tax Type</Label>
+                  <Select value={settings.taxInclusive ? 'inclusive' : 'exclusive'} onValueChange={(value) => setSettings({...settings, taxInclusive: value === 'inclusive'})} disabled={!settings.taxEnabled}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inclusive">Inclusive</SelectItem>
+                      <SelectItem value="exclusive">Exclusive</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>{t.currency}</Label>
@@ -337,24 +358,64 @@ const Settings: React.FC<SettingsProps> = ({ isUrdu, setIsUrdu }) => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications">
+        <TabsContent value="billing">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <Bell className="h-5 w-5" />
-                <span>{t.notifications}</span>
+                <Printer className="h-5 w-5" />
+                <span>Billing Slip Settings</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>{t.enableNotifications}</Label>
-                <Switch
-                  checked={settings.notifications}
-                  onCheckedChange={(checked) => setSettings({...settings, notifications: checked})}
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label>Template Style</Label>
+                  <Select value={settings.template || 'default'} onValueChange={(value) => setSettings({...settings, template: value})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      <SelectItem value="minimal">Minimal</SelectItem>
+                      <SelectItem value="modern">Modern</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Pharmacy Name (Slip)</Label>
+                  <Input value={settings.slipName || settings.companyName || ''} onChange={(e) => setSettings({...settings, slipName: e.target.value})} />
+                </div>
+                <div>
+                  <Label>Footer Text</Label>
+                  <Input value={settings.footerText || ''} onChange={(e) => setSettings({...settings, footerText: e.target.value})} />
+                </div>
               </div>
-              
-              <div className="flex items-center justify-between">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Pharmacy Logo</Label>
+<input
+  type="file"
+  accept="image/*"
+  onChange={async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setSettings({ ...settings, logo: ev.target?.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  }}
+/>
+{settings.logo && (
+  <img
+    src={settings.logo}
+    alt="Pharmacy Logo Preview"
+    className="h-16 mt-2 rounded border shadow"
+    style={{ objectFit: 'contain', background: '#fff' }}
+  />
+)}
+                </div>
                 <Label>{t.printReceipts}</Label>
                 <Switch
                   checked={settings.printReceipts}

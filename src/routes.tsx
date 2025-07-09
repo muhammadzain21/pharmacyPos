@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createHashRouter } from 'react-router-dom';
 import App from '@/App';
 import Index from '@/pages/Index';
 import { MedicineManagementPage } from '@/pages/MedicineManagementPage';
@@ -12,7 +12,7 @@ import { Outlet } from 'react-router-dom';
 
 const AppLayout = () => <App><Outlet /></App>;
 
-export const router = createBrowserRouter([
+export const router = createHashRouter([
   {
     path: '/login',
     element: <LoginPage />,

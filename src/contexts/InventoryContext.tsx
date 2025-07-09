@@ -1,12 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { getInventory, saveInventory, InventoryItem } from '@/utils/inventoryService';
+import { getInventory, addInventoryItem, InventoryItem } from '@/utils/inventoryService';
 
 interface InventoryContextType {
   inventory: InventoryItem[];
   refreshInventory: () => Promise<void>;
-  updateItemInInventory: (id: number, updates: Partial<InventoryItem>) => Promise<void>;
   addItemToInventory: (item: Omit<InventoryItem, 'id'>) => Promise<void>;
-  removeItemFromInventory: (id: number) => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -23,38 +21,12 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const updateItemInInventory = async (id: number, updates: Partial<InventoryItem>) => {
-    try {
-      const updatedInventory = inventory.map(item => 
-        item.id === id ? { ...item, ...updates, id } : item
-      );
-      await saveInventory(updatedInventory);
-      setInventory(updatedInventory);
-    } catch (error) {
-      console.error('Failed to update item in inventory:', error);
-      throw error;
-    }
-  };
-
   const addItemToInventory = async (item: Omit<InventoryItem, 'id'>) => {
     try {
-      const newItem = { ...item, id: Date.now() };
-      const updatedInventory = [...inventory, newItem];
-      await saveInventory(updatedInventory);
-      setInventory(updatedInventory);
+      await addInventoryItem(item);
+      await refreshInventory();
     } catch (error) {
       console.error('Failed to add item to inventory:', error);
-      throw error;
-    }
-  };
-
-  const removeItemFromInventory = async (id: number) => {
-    try {
-      const updatedInventory = inventory.filter(item => item.id !== id);
-      await saveInventory(updatedInventory);
-      setInventory(updatedInventory);
-    } catch (error) {
-      console.error('Failed to remove item from inventory:', error);
       throw error;
     }
   };
@@ -62,6 +34,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
   // Load inventory on mount
   useEffect(() => {
     refreshInventory();
+    // eslint-disable-next-line
   }, []);
 
   return (
@@ -69,9 +42,7 @@ export const InventoryProvider: React.FC<{ children: ReactNode }> = ({ children 
       value={{
         inventory,
         refreshInventory,
-        updateItemInInventory,
         addItemToInventory,
-        removeItemFromInventory,
       }}
     >
       {children}

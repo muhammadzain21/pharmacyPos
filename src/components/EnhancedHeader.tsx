@@ -39,6 +39,13 @@ const EnhancedHeader: React.FC<EnhancedHeaderProps> = ({
   const { settings } = useSettings();
   const [isOnline, setIsOnline] = React.useState(navigator.onLine);
 
+  // --- Insert logo in header ---
+  // Place this at the start of your main header render/return:
+  // {settings.logo && (
+  //   <img src={settings.logo} alt="Pharmacy Logo" className="h-10 mr-4 rounded bg-white border shadow" style={{objectFit: 'contain'}} />
+  // )}
+
+
   React.useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);

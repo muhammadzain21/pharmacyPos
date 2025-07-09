@@ -378,20 +378,7 @@ class LicenseManager {
     return true;
   }
 
-  hasFeature(feature: string): boolean {
-    const validation = this.validateLicense();
-    if (!validation.valid || !validation.license) return false;
-    return validation.license.features.includes(feature);
-  }
-
-  getLicenseInfo(): License | null {
-    return this.currentLicense;
-  }
-
-  getAllLicenses(): License[] {
-    return this.licenses;
-  }
-
+  
   private generateHardwareFingerprint(): string {
     const navigator_info = navigator.userAgent + navigator.platform;
     const screen_info = screen.width + 'x' + screen.height + 'x' + screen.colorDepth;
@@ -473,6 +460,7 @@ class LicenseManager {
   }
 
   getAllLicenses(): License[] {
+    // Only one definition should exist. Returns all licenses.
     return this.licenses;
   }
 

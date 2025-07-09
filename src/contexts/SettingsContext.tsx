@@ -6,6 +6,8 @@ interface Settings {
   companyPhone: string;
   companyEmail: string;
   taxRate: string;
+  taxEnabled?: boolean;
+  taxInclusive?: boolean;
   currency: string;
   dateFormat: string;
   notifications: boolean;
@@ -13,6 +15,11 @@ interface Settings {
   printReceipts: boolean;
   barcodeScanning: boolean;
   language: string;
+  // Billing slip fields
+  template?: string;
+  slipName?: string;
+  footerText?: string;
+  logo?: string;
 }
 
 interface SettingsContextType {
@@ -27,6 +34,8 @@ const defaultSettings: Settings = {
   companyPhone: '+92-21-1234567',
   companyEmail: 'info@pharmacare.com',
   taxRate: '17',
+  taxEnabled: true,
+  taxInclusive: false,
   currency: 'PKR',
   dateFormat: 'dd/mm/yyyy',
   notifications: true,
@@ -34,6 +43,10 @@ const defaultSettings: Settings = {
   printReceipts: true,
   barcodeScanning: true,
   language: 'en',
+  template: 'default',
+  slipName: '',
+  footerText: '',
+  logo: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);

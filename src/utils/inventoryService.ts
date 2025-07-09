@@ -1,7 +1,7 @@
 const INVENTORY_STORAGE_KEY = 'pharmacy_inventory';
 
 export interface InventoryItem {
-  id: number;
+  id: string;
   name: string;
   genericName: string;
   price: number;
@@ -19,59 +19,90 @@ export interface InventoryItem {
   supplierName?: string;
 }
 
-export const getInventory = (): InventoryItem[] => {
-  if (typeof window === 'undefined') return [];
+// Inventory CRUD logic is now handled by the backend API.
+
+// TODO: low stock logic should come from backend API
+
+// TODO: search inventory via backend API
+
+export const getInventory = async (): Promise<InventoryItem[]> => {
   try {
-    const saved = localStorage.getItem(INVENTORY_STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
-  } catch (error) {
-    console.error('Error reading from localStorage:', error);
-    return [];
-  }
-};
-
-export const saveInventory = (items: InventoryItem[]): void => {
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(items));
-    } catch (error) {
-      console.error('Error writing to localStorage:', error);
+    const response = await fetch('/api/inventory');
+    if (!response.ok) {
+      throw new Error('Failed to fetch inventory');
     }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching inventory:', error);
+    throw error;
   }
 };
 
-export const updateItemStock = (id: number, quantity: number): boolean => {
-  const items = getInventory();
-  const itemIndex = items.findIndex(item => item.id === id);
-  
-  if (itemIndex === -1) return false;
-  
-  const newStock = items[itemIndex].stock + quantity;
-  if (newStock < 0) return false; // Prevent negative stock
-  
-  const updatedItems = [...items];
-  updatedItems[itemIndex] = {
-    ...updatedItems[itemIndex],
-    stock: newStock
-  };
-  
-  saveInventory(updatedItems);
-  return true;
+export const saveInventory = async (items: InventoryItem[]): Promise<void> => {
+  try {
+    const response = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(items)
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to save inventory');
+    }
+  } catch (error) {
+    console.error('Error saving inventory:', error);
+    throw error;
+  }
 };
 
-export const getLowStockItems = (threshold: number = 10): InventoryItem[] => {
-  const items = getInventory();
-  return items.filter(item => item.stock <= (item.minStock || threshold));
+export const searchInventory = async (query: string): Promise<InventoryItem[]> => {
+  try {
+    const response = await fetch(`/api/inventory/search?q=${encodeURIComponent(query)}`);
+    if (!response.ok) {
+      throw new Error('Failed to search inventory');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error searching inventory:', error);
+    throw error;
+  }
 };
 
-export const searchInventory = (query: string): InventoryItem[] => {
-  const items = getInventory();
-  if (!query) return items;
-  
-  const queryLower = query.toLowerCase();
-  return items.filter(item => 
-    item.name.toLowerCase().includes(queryLower) ||
-    (item.genericName?.toLowerCase().includes(queryLower) ?? false) ||
-    (item.barcode?.includes(query) ?? false)
-  );
+export const addInventoryItem = async (item: Omit<InventoryItem, 'id'>): Promise<InventoryItem> => {
+  try {
+    const response = await fetch('/api/inventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to add inventory item');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error adding inventory item:', error);
+    throw error;
+  }
+};
+
+export const updateItemStock = async (itemId: string, quantityChange: number): Promise<InventoryItem> => {
+  try {
+    const response = await fetch(`/api/inventory/${itemId}/stock`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ change: quantityChange })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update item stock');
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating item stock:', error);
+    throw error;
+  }
 };

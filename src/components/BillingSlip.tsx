@@ -105,8 +105,8 @@ export const BillingSlip: React.FC<BillingSlipProps> = ({
       
       {/* Footer */}
       <div className="text-center text-xs text-gray-500 mb-4">
-        <p>Thank you for your purchase!</p>
-        <p>{settings.pharmacySlogan || 'Your health is our priority'}</p>
+        <p>{settings.slogan || 'Thank you for your purchase!'}</p>
+        <p>{settings.footerText || 'Your health is our priority'}</p>
       </div>
       
       {/* Actions */}

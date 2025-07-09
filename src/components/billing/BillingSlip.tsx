@@ -23,7 +23,7 @@ export function BillingSlip({
   date,
   template = 'default'
 }: BillingSlipProps) {
-  const { pharmacySettings } = useSettings();
+  const { settings } = useSettings();
   
   const formattedDate = useMemo(() => {
     return date.toLocaleDateString('en-PK', {
@@ -62,14 +62,15 @@ export function BillingSlip({
     <div className={styles.container}>
       {/* Pharmacy Header */}
       <div className={styles.header}>
-        {pharmacySettings.logo && template !== 'minimal' && (
+        {settings.logo && template !== 'minimal' && (
           <img 
-            src={pharmacySettings.logo} 
+            src={settings.logo} 
             alt="Pharmacy Logo" 
-            className="h-16 mx-auto mb-2"
+            className="h-16 mx-auto mb-2 rounded border shadow"
+            style={{ objectFit: 'contain', background: '#fff' }}
           />
         )}
-        <h1 className="text-xl font-bold">{pharmacySettings.name || 'Pharmacy'}</h1>
+        <h1 className="text-xl font-bold">{settings.slipName || settings.companyName || 'Pharmacy'}</h1>
         {template !== 'minimal' && (
           <p className="text-sm text-muted-foreground">
             {pharmacySettings.address || 'Address not configured'}
@@ -124,8 +125,7 @@ export function BillingSlip({
       {/* Footer */}
       {template !== 'minimal' && (
         <div className="mt-4 text-center text-xs text-muted-foreground">
-          <p>Thank you for your purchase!</p>
-          <p>{pharmacySettings.footerText || 'Please visit again'}</p>
+          <p>{settings.footerText || 'Thank you for your purchase!'}</p>
         </div>
       )}
     </div>
