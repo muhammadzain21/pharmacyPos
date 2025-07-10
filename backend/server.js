@@ -30,7 +30,9 @@ app.get('/', (req, res) => {
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/sales', require('./routes/sales'));
 app.use('/api/expenses', require('./routes/expenses'));
-app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/suppliers', require('./routes/supplierRoutes'));
+app.use('/api/medicines', require('./routes/medicineRoutes'));
+app.use('/api/add-stock', require('./routes/addStock'));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

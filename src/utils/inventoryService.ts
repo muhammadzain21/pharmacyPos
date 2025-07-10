@@ -27,11 +27,33 @@ export interface InventoryItem {
 
 export const getInventory = async (): Promise<InventoryItem[]> => {
   try {
-    const response = await fetch('/api/inventory');
+    // Fetch all AddStock records which include populated medicine and supplier details
+    const response = await fetch('/api/add-stock');
     if (!response.ok) {
       throw new Error('Failed to fetch inventory');
     }
-    return await response.json();
+
+    const records = await response.json();
+
+    // Transform AddStock records into the InventoryItem shape expected by the UI
+    return records.map((record: any) => ({
+      id: record._id,
+      name: record.medicine?.name || '',
+      genericName: record.medicine?.genericName || '',
+      price: record.unitPrice || 0,
+      stock: record.quantity || 0,
+      barcode: record.medicine?.barcode,
+      category: record.medicine?.category,
+      manufacturer: record.medicine?.manufacturer,
+      minStock: record.minStock ?? 0,
+      maxStock: record.maxStock ?? undefined,
+      purchasePrice: record.unitPrice,
+      salePrice: record.salePrice ?? record.unitPrice,
+      batchNo: record.batchNo,
+      expiryDate: record.expiryDate,
+      manufacturingDate: record.manufacturingDate,
+      supplierName: record.supplier?.name,
+    })) as InventoryItem[];
   } catch (error) {
     console.error('Error fetching inventory:', error);
     throw error;

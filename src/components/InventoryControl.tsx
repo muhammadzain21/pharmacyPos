@@ -32,13 +32,21 @@ interface InventoryControlProps {
 }
 
 interface AddStockDialogProps {
-  inventory: InventoryItem[];
-  suppliers: {id: string; name: string}[];
   onStockAdded: () => void;
+  onCancel: () => void;
 }
 
-const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, onStockAdded }) => {
-  const [selectedMedicine, setSelectedMedicine] = useState<InventoryItem | null>(null);
+export type SupplierType = { _id?: string; id?: string; name: string };
+
+import { getMedicines } from '@/utils/medicineService';
+import { getSuppliers } from '@/utils/supplierService';
+
+const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded, onCancel }) => {
+  const [minStock, setMinStock] = useState<string>('');
+  const [expiryDate, setExpiryDate] = useState<string>('');
+  const [medicines, setMedicines] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierType[]>([]);
+  const [selectedMedicine, setSelectedMedicine] = useState<any | null>(null);
   const [stockQuantity, setStockQuantity] = useState<string>('');
   const [unitPrice, setUnitPrice] = useState<string>('');
   const [salePrice, setSalePrice] = useState<string>('');
@@ -47,9 +55,56 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [newSupplierName, setNewSupplierName] = useState<string>('');
   const [showNewSupplierField, setShowNewSupplierField] = useState<boolean>(false);
+  const [showNewMedicineField, setShowNewMedicineField] = useState<boolean>(false);
+  const [newMedicineName, setNewMedicineName] = useState<string>('');
+  const [newGenericName, setNewGenericName] = useState<string>('');
   const { toast } = useToast();
 
-  const handleAddStock = async () => {
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const meds = await getMedicines();
+        setMedicines(meds);
+        const sups = await getSuppliers();
+        setSuppliers(sups as SupplierType[]);
+      } catch (e) {
+        toast({ title: 'Error', description: 'Failed to fetch medicines or suppliers', variant: 'destructive' });
+      }
+    };
+    fetchData();
+  }, []);
+
+  const handleAddSupplier = async () => {
+    if (!newSupplierName.trim()) return;
+    try {
+      const res = await axios.post('/api/suppliers', { name: newSupplierName });
+      setSuppliers((prev: SupplierType[]) => [...prev, res.data]);
+      setSelectedSupplier(res.data._id || res.data.id);
+      setShowNewSupplierField(false);
+      setNewSupplierName('');
+      toast({ title: 'Success', description: 'Supplier added' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to add supplier', variant: 'destructive' });
+    }
+  };
+
+  const handleAddMedicine = async () => {
+  if (!newMedicineName.trim() || !newGenericName.trim()) return;
+  try {
+    const res = await axios.post('/api/medicines', { name: newMedicineName, genericName: newGenericName });
+    setMedicines(prev => [...prev, res.data]);
+    setSelectedMedicine(res.data);
+    setShowNewMedicineField(false);
+    setNewMedicineName('');
+    setNewGenericName('');
+    toast({ title: 'Success', description: 'Medicine added' });
+  } catch (e) {
+    toast({ title: 'Error', description: 'Failed to add medicine', variant: 'destructive' });
+  }
+};
+
+const handleAddStock = async () => {
+    console.log("handleAddStock called", { selectedMedicine, stockQuantity, unitPrice });
     if (!selectedMedicine || !stockQuantity || !unitPrice) {
       toast({
         title: 'Error',
@@ -61,19 +116,12 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
 
     try {
       const supplier = showNewSupplierField ? newSupplierName : selectedSupplier;
-      
-      const updatedItem = {
-        ...selectedMedicine,
-        stock: (parseInt(selectedMedicine.stock.toString()) + parseInt(stockQuantity)).toString(),
-        purchasePrice: unitPrice,
-        salePrice: salePrice || selectedMedicine.salePrice,
-        lastPurchasePrice: unitPrice,
-        lastPurchaseDate: new Date().toISOString(),
-        lastSupplier: supplier,
-      };
+      const medicineId = selectedMedicine._id || selectedMedicine.id;
 
-      // Update stock via backend API
-      await axios.patch(`/api/inventory/${updatedItem.id}/stock`, { quantity: parseInt(stockQuantity), unitPrice, salePrice, supplier });
+      const payload = { medicine: medicineId, quantity: parseInt(stockQuantity), unitPrice: parseFloat(unitPrice), supplier, minStock: minStock ? parseInt(minStock) : undefined, expiryDate: expiryDate || undefined };
+      console.log('POST-payload', payload);
+      await axios.post('/api/add-stock', payload);
+      console.log('POST-success');
       onStockAdded();
       
       toast({
@@ -107,22 +155,113 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
               Medicine
             </Label>
             <Select 
-              onValueChange={(value) => setSelectedMedicine(inventory.find(item => String(item.id) === value) || null)}
+              value={selectedMedicine ? selectedMedicine._id || selectedMedicine.id : ''}
+              onValueChange={val => {
+                const med = medicines.find(m => m._id === val || m.id === val);
+                setSelectedMedicine(med);
+              }}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select medicine" />
               </SelectTrigger>
               <SelectContent>
-                {inventory.map((item) => (
-                  <SelectItem key={String(item.id)} value={String(item.id)}>
+                {medicines.map((item) => (
+                  <SelectItem key={String(item._id || item.id)} value={String(item._id || item.id)}>
                     {item.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <div className="mt-2 flex gap-2 items-center">
+              <Button variant="outline" size="sm" onClick={() => setShowNewMedicineField(true)}>
+                + Add Medicine
+              </Button>
+            </div>
+            {showNewMedicineField && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Input
+                  placeholder="Medicine Name"
+                  value={newMedicineName}
+                  onChange={e => setNewMedicineName(e.target.value)}
+                />
+                <Input
+                  placeholder="Generic Name"
+                  value={newGenericName}
+                  onChange={e => setNewGenericName(e.target.value)}
+                />
+                <Button
+                  className="col-span-2"
+                  size="sm"
+                  onClick={handleAddMedicine}
+                >
+                  Save Medicine
+                </Button>
+              </div>
+            )}
           </div>
           
-          {/* Other fields remain the same */}
+          {/* Quantity field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="quantity" className="text-right">
+              Quantity
+            </Label>
+            <Input
+              id="quantity"
+              type="number"
+              min="1"
+              className="col-span-3"
+              value={stockQuantity}
+              onChange={e => setStockQuantity(e.target.value)}
+              placeholder="Enter quantity"
+              required
+            />
+          </div>
+          {/* Minimum Stock field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="minStock" className="text-right">
+              Minimum Stock
+            </Label>
+            <Input
+              id="minStock"
+              type="number"
+              min="0"
+              className="col-span-3"
+              value={minStock}
+              onChange={e => setMinStock(e.target.value)}
+              placeholder="Enter minimum stock"
+            />
+          </div>
+          {/* Expiry Date field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="expiryDate" className="text-right">
+              Expiry Date
+            </Label>
+            <Input
+              id="expiryDate"
+              type="date"
+              className="col-span-3"
+              value={expiryDate}
+              onChange={e => setExpiryDate(e.target.value)}
+              placeholder="Select expiry date"
+            />
+          </div>
+          {/* Unit Price field */}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="unitPrice" className="text-right">
+              Unit Price
+            </Label>
+            <Input
+              id="unitPrice"
+              type="number"
+              min="0"
+              step="0.01"
+              className="col-span-3"
+              value={unitPrice}
+              onChange={e => setUnitPrice(e.target.value)}
+              placeholder="Enter unit price"
+              required
+            />
+          </div>
           
           {/* Supplier selection */}
           <div className="grid grid-cols-4 items-center gap-4">
@@ -137,11 +276,14 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
                       <SelectValue placeholder="Select supplier" />
                     </SelectTrigger>
                     <SelectContent>
-                      {suppliers.map((supplier) => (
-                        <SelectItem key={supplier.id} value={supplier.id}>
-                          {supplier.name}
-                        </SelectItem>
-                      ))}
+                      {suppliers.map((supplier) => {
+                        const value = supplier._id ? String(supplier._id) : String(supplier.id);
+                        return (
+                          <SelectItem key={value} value={value}>
+                            {supplier.name}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <Button
@@ -153,17 +295,25 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
                   </Button>
                 </>
               ) : (
-                <Input
-                  value={newSupplierName}
-                  onChange={(e) => setNewSupplierName(e.target.value)}
-                  placeholder="Enter new supplier name"
-                />
+                <div className="flex gap-2 w-full">
+                  <Input
+                    value={newSupplierName}
+                    onChange={(e) => setNewSupplierName(e.target.value)}
+                    placeholder="Enter new supplier name"
+                  />
+                  <Button size="sm" variant="default" onClick={handleAddSupplier}>
+                    Add
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowNewSupplierField(false)}>
+                    Cancel
+                  </Button>
+                </div>
               )}
             </div>
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline">Cancel</Button>
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={handleAddStock}>Add Stock</Button>
         </div>
       </DialogContent>
@@ -173,9 +323,38 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ inventory, suppliers, o
 };
 
 const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  // --- Add Medicine Dialog State ---
+  const [isAddMedicineDialogOpen, setIsAddMedicineDialogOpen] = useState(false);
+  const [medicineForm, setMedicineForm] = useState({ name: '', genericName: '' });
   const { toast } = useToast();
+
+  // Handler for submitting new medicine
+  const handleAddMedicine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!medicineForm.name.trim() || !medicineForm.genericName.trim()) {
+      toast({ title: 'Error', description: 'Name and generic name are required', variant: 'destructive' });
+      return;
+    }
+    try {
+      await axios.post('/api/medicines', medicineForm);
+      toast({ title: 'Success', description: 'Medicine added successfully' });
+      setMedicineForm({ name: '', genericName: '' });
+      setIsAddMedicineDialogOpen(false);
+    } catch (error: any) {
+      toast({ title: 'Error', description: error?.response?.data?.error || 'Failed to add medicine', variant: 'destructive' });
+    }
+  };
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // Edit dialog state
+  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
+  const [editForm, setEditForm] = useState({
+    stock: '',
+    unitPrice: '',
+    minStock: '',
+    expiryDate: '',
+  });
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   // Initialize all state at the top
   const [searchTerm, setSearchTerm] = useState('');
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
@@ -203,7 +382,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   });
 
   // Supplier state for dropdown and add-new
-  const [suppliers, setSuppliers] = useState<{id: string; name: string}[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierType[]>([]);
   const [showAddSupplierDialog, setShowAddSupplierDialog] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
 
@@ -388,10 +567,37 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     }
   };
 
-  // Stub for editing inventory item
+  // Open edit dialog and populate form
   const handleEditItem = (item: InventoryItem) => {
-    // TODO: Implement edit logic (open edit dialog, populate form, etc.)
-    alert('Edit functionality is not implemented yet.');
+    setEditItem(item);
+    setEditForm({
+      stock: String(item.stock ?? ''),
+      unitPrice: String(item.price ?? ''),
+      minStock: String(item.minStock ?? ''),
+      expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : '',
+    });
+  };
+
+  const handleEditFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editItem) return;
+    try {
+      await axios.put(`/api/add-stock/${editItem.id}`, {
+        quantity: Number(editForm.stock),
+        unitPrice: Number(editForm.unitPrice),
+        minStock: editForm.minStock ? Number(editForm.minStock) : undefined,
+        expiryDate: editForm.expiryDate || undefined,
+      });
+      toast({ title: 'Success', description: 'Item updated' });
+      setEditItem(null);
+      await refreshInventory();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update item', variant: 'destructive' });
+    }
   };
 
   const categories = [
@@ -509,7 +715,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   ];
 
   const handleDeleteInventory = (id: number) => {
-    setDeleteTargetId(id);
+    setDeleteTargetId(String(id));
     setShowDeleteDialog(true);
   };
 
@@ -518,14 +724,16 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     const updatedInventory = inventory.filter(item => String(item.id) !== String(deleteTargetId));
     
     // Delete inventory item via backend API
-    axios.delete(`/api/inventory/${deleteTargetId}`)
+    axios.delete(`/api/add-stock/${deleteTargetId}`)
       .then(() => {
         loadInventory();
         setShowDeleteDialog(false);
         setDeleteTargetId(null);
         toast({
           title: isUrdu ? 'کامیابی' : 'Success',
-          description: isUrdu ? 'اسٹاک آئٹم کامیابی سے حذف ہو گیا' : 'Inventory item deleted successfully',
+          description: isUrdu 
+            ? 'اسٹاک آئٹم کامیابی سے حذف ہو گیا' 
+            : 'Inventory item deleted successfully',
         });
       })
       .catch(() => {
@@ -539,12 +747,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   };
 
   const loadInventory = async () => {
-    try {
-      const res = await axios.get('/api/inventory');
-      refreshInventory();
-    } catch {
-      refreshInventory();
-    }
+    await refreshInventory();
   };
 
   return (
@@ -552,52 +755,66 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       <div>
         {/* Header */}
         <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
-          <div className="flex space-x-2">
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="default">
-                  {isUrdu ? 'نیا اسٹاک شامل کریں' : 'Add New Stock'}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{isUrdu ? 'نیا اسٹاک شامل کریں' : 'Add New Stock'}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">{isUrdu ? 'ادویات کا نام' : 'Medicine Name'} <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      placeholder={isUrdu ? 'ادویات کا نام درج کریں' : 'Enter medicine name'}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="genericName">{isUrdu ? 'جنیرک نام' : 'Generic Name'} <span className="text-red-500">*</span></Label>
-                    <Input
-                      id="genericName"
-                      name="genericName"
-                      value={formData.genericName}
-                      onChange={handleInputChange}
-                      placeholder={isUrdu ? 'جنیرک نام درج کریں' : 'Enter generic name'}
-                      required
-                    />
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-            <Button variant="outline">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              {t.refresh}
+  <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
+  <div className="flex space-x-2">
+    {/* Add Inventory Button */}
+    
+    {/* Add New Stock Button */}
+    <Dialog open={isAddMedicineDialogOpen} onOpenChange={setIsAddMedicineDialogOpen}>
+      <DialogTrigger asChild>
+        <Button variant="default">
+          {isUrdu ? 'نئی دوا شامل کریں' : 'Add New Stock'}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{isUrdu ? 'نئی دوا شامل کریں' : 'Add New Medicine'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleAddMedicine} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="medicineName">{isUrdu ? 'ادویات کا نام' : 'Medicine Name'} <span className="text-red-500">*</span></Label>
+            <Input
+              id="medicineName"
+              name="medicineName"
+              value={medicineForm.name}
+              onChange={e => setMedicineForm({ ...medicineForm, name: e.target.value })}
+              placeholder={isUrdu ? 'ادویات کا نام درج کریں' : 'Enter medicine name'}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="genericName">{isUrdu ? 'جنیرک نام' : 'Generic Name'} <span className="text-red-500">*</span></Label>
+            <Input
+              id="genericName"
+              name="genericName"
+              value={medicineForm.genericName}
+              onChange={e => setMedicineForm({ ...medicineForm, genericName: e.target.value })}
+              placeholder={isUrdu ? 'جنیرک نام درج کریں' : 'Enter generic name'}
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" type="button" onClick={() => setIsAddMedicineDialogOpen(false)}>
+              {isUrdu ? 'منسوخ' : 'Cancel'}
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={async () => {
-                try {
+            <Button type="submit">{isUrdu ? 'محفوظ کریں' : 'Save'}</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+    {/* Add Stock Button */}
+    <AddStockDialog 
+      onStockAdded={loadInventory}
+      onCancel={() => setIsAddDialogOpen(false)}
+    />
+    <Button variant="outline">
+      <RefreshCw className="h-4 w-4 mr-2" />
+      {t.refresh}
+    </Button>
+    <Button 
+      variant="outline" 
+      onClick={async () => {
+        try {
                   // Get the button element to update its state
                   const exportButton = document.querySelector('button:has(> svg.download-icon)') as HTMLButtonElement;
                   if (exportButton) {
@@ -893,16 +1110,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
         </div>
       </TabsContent>
     </Tabs>
-    <div className="flex space-x-2">
-      <Button onClick={() => setIsAddDialogOpen(true)}>
-        <Plus className="mr-2 h-4 w-4" /> Add Inventory
-      </Button>
-      <AddStockDialog 
-        inventory={inventory}
-        suppliers={suppliers} 
-        onStockAdded={loadInventory}
-      />
-    </div>
+    
     {/* Add Supplier Dialog */}
     <Dialog open={showAddSupplierDialog} onOpenChange={setShowAddSupplierDialog}>
       <DialogContent>
