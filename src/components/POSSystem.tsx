@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { offlineManager } from '../utils/offlineManager';
 import { loyaltyManager } from '../utils/loyaltyManager';
 import { getInventory, searchInventory, updateItemStock, InventoryItem } from '@/utils/inventoryService';
-import { saveSaleToRecent } from '@/utils/salesService';
+
 import { useSettings } from '@/contexts/SettingsContext';
 import BarcodeScanner from './BarcodeScanner';
 import protectedMedicines from '@/data/protectedMedicines';
@@ -473,10 +473,45 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
         setCustomerLoyalty(updatedLoyalty);
       }
 
-      // Save sale data offline
-      const saleData = {
-        id: `INV-${Date.now()}`,
-        date: new Date(),
+      // Prepare payload for the backend
+      const salePayload = {
+        items: cartItems.map(item => ({
+          medicineId: item.id,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        totalAmount: total,
+        paymentMethod: paymentMethod,
+        customerId: customerInfo.id || customerInfo.name,
+      };
+
+      // Send sale to the backend
+      const response = await fetch('http://localhost:5000/api/sales', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(salePayload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save sale to the backend.');
+      }
+
+      const savedSale = await response.json();
+
+      // Dispatch custom event to signal sale completion for dashboard update
+      window.dispatchEvent(new Event('saleCompleted'));
+
+      toast({
+        title: t.paymentSuccessful,
+        description: `Total: PKR ${total.toFixed(2)}, Points Earned: ${pointsEarned}`,
+      });
+
+      // Use the saved sale data for the receipt
+      const receiptData = {
+        id: savedSale._id, // Use backend ID for receipt
+        date: new Date(savedSale.date),
         items: cartItems,
         customerName: customerInfo.name,
         customerPhone: customerInfo.phone,
@@ -484,38 +519,15 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
         discount: discountAmount,
         loyaltyDiscount: loyaltyDiscountAmount,
         tax,
-        taxRate: taxRate, // Add tax rate to sale data
+        taxRate: taxRate,
         total,
         paymentMethod,
         pointsEarned: customerInfo.phone ? loyaltyManager.calculatePoints(total) : 0,
       };
 
-      const existingSales = offlineManager.getData('sales') || [];
-      offlineManager.saveData('sales', [...existingSales, saleData]);
-      
-      // Save to recent sales for dashboard
-      cartItems.forEach(item => {
-        saveSaleToRecent({
-          medicine: item.name,
-          customer: customerInfo.name || 'Walk-in Customer',
-          amount: item.price * item.quantity,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          date: new Date().toLocaleDateString()
-        });
-      });
-      // Dispatch custom event to signal sale completion
-      window.dispatchEvent(new Event('saleCompleted'));
-      
-      toast({
-        title: t.paymentSuccessful,
-        description: `Total: PKR ${total.toFixed(2)}, Points Earned: ${pointsEarned}`,
-      });
-      
-      // Print receipt and update inventory after print
+      // Print receipt and clear cart
       setTimeout(() => {
-        printEnhancedReceipt(saleData);
-        // Update inventory only after successful print
-        updateInventory(cartItems);
+        printEnhancedReceipt(receiptData);
       }, 500);
       
       setShowPaymentDialog(false);

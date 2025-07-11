@@ -9,13 +9,13 @@ import {
   ShoppingCart,
   Users,
   Clock,
-  RefreshCw
+  RefreshCw,
+  DollarSign
 } from 'lucide-react';
 import { 
-  getTodaySales, 
   getTotalInventory,
   getLowStockItems,
-  getMonthlyProfit 
+  getOutOfStockItems,
 } from '@/utils/dashboardService';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
@@ -30,13 +30,24 @@ import {
   Users as UsersIcon,
   Calendar as CalendarIcon2,
   Clock as ClockIcon,
-  RefreshCw as RefreshCwIcon
+  RefreshCw as RefreshCwIcon,
+  DollarSign as DollarSignIcon
 } from 'lucide-react';
 import { getRecentSales } from '@/utils/salesService';
 import { getInventory } from '@/utils/inventoryService';
 
 interface DashboardProps {
   isUrdu: boolean;
+}
+
+interface DashboardStats {
+  todaySales: number;
+  monthlySales: number;
+  totalInventory: number;
+  lowStockItems: number;
+  outOfStockItems: number;
+  totalStockValue: number;
+  isLoading: boolean;
 }
 
 interface SaleItem {
@@ -56,14 +67,6 @@ interface FormData {
   discount: string;
   date: Date | undefined;
   time: string;
-}
-
-interface DashboardStats {
-  todaySales: number;
-  totalInventory: number;
-  lowStockItems: number;
-  monthlyProfit: number;
-  isLoading: boolean;
 }
 
 // Helper functions for localStorage
@@ -87,44 +90,66 @@ const loadFromLocalStorage = (): SaleItem[] => {
   }
 };
 
+// StatCard component for better code organization
+const StatCard = ({ stat }: { stat: { title: string; value: string; icon: any; color: string; bgColor: string } }) => {
+  const Icon = stat.icon;
+  return (
+    <Card className="transition-all hover:shadow-lg h-full">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-gray-500 truncate">{stat.title}</p>
+            <p className="text-lg font-bold text-gray-900 truncate">{stat.value}</p>
+          </div>
+          <div className={`p-2 rounded-full ${stat.bgColor} ml-2 flex-shrink-0`}>
+            <Icon className={`h-5 w-5 ${stat.color}`} />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
-  const [recentSales, setRecentSales] = useState<SaleItem[]>(() => loadFromLocalStorage());
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,
+    monthlySales: 0,
     totalInventory: 0,
     lowStockItems: 0,
-    monthlyProfit: 0,
+    outOfStockItems: 0,
+    totalStockValue: 0,
     isLoading: true
   });
   const [lastUpdated, setLastUpdated] = useState<string>('');
-
-  // Listen for saleCompleted event to update sales in real time
-  useEffect(() => {
-    const handleSaleCompleted = () => {
-      setRecentSales(loadFromLocalStorage());
-    };
-    window.addEventListener('saleCompleted', handleSaleCompleted);
-    return () => {
-      window.removeEventListener('saleCompleted', handleSaleCompleted);
-    };
-  }, []);
+  const [recentSales, setRecentSales] = useState<SaleItem[]>(() => loadFromLocalStorage());
 
   const fetchDashboardData = async () => {
     try {
       setStats(prev => ({...prev, isLoading: true}));
       
-      const [sales, inventory, lowStock, profit] = await Promise.all([
-        getTodaySales(),
+      const [summaryResponse, inventory, lowStock, outOfStock, inventoryItems] = await Promise.all([
+        fetch('http://localhost:5000/api/sales/summary'),
         getTotalInventory(),
         getLowStockItems(),
-        getMonthlyProfit()
+        getOutOfStockItems(),
+        fetch('http://localhost:5000/api/inventory').then(res => res.ok ? res.json() : [])
       ]);
 
+      if (!summaryResponse.ok) {
+        throw new Error('Failed to fetch sales summary');
+      }
+
+      const summaryData = await summaryResponse.json();
+      const totalStockValue = inventoryItems.reduce((sum: number, item: any) => 
+        sum + (item.stock * (item.price || 0)), 0);
+
       setStats({
-        todaySales: sales,
+        todaySales: summaryData.today.totalAmount,
+        monthlySales: summaryData.month.totalAmount,
         totalInventory: inventory,
         lowStockItems: lowStock,
-        monthlyProfit: profit,
+        outOfStockItems: outOfStock,
+        totalStockValue,
         isLoading: false
       });
       
@@ -138,23 +163,27 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
   useEffect(() => {
     fetchDashboardData();
     
+    const handleSaleCompleted = () => {
+      fetchDashboardData();
+    };
+    window.addEventListener('saleCompleted', handleSaleCompleted);
+
     // Set up auto-refresh every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('saleCompleted', handleSaleCompleted);
+    };
   }, []);
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return '';
-    return format(date, 'PPP');
-  };
 
   const text = {
     en: {
       title: 'Dashboard',
       todaysSales: "Today's Sales",
+      monthlySales: "This Month's Sales",
       totalInventory: "Total Inventory",
       lowStock: "Low Stock Items",
-      monthlyProfit: "Monthly Profit",
       recentSales: "Recent Sales",
       expiringMedicines: "Expiring Soon",
       topSelling: "Top Selling",
@@ -163,9 +192,9 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
     ur: {
       title: 'ڈیش بورڈ',
       todaysSales: "آج کی سیلز",
+      monthlySales: "اس مہینے کی سیلز",
       totalInventory: "کل انوینٹری",
       lowStock: "کم اسٹاک",
-      monthlyProfit: "ماہانہ منافع",
       recentSales: "حالیہ سیلز",
       expiringMedicines: "ختم ہونے والی",
       topSelling: "زیادہ فروخت",
@@ -175,45 +204,48 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
 
   const t = isUrdu ? text.ur : text.en;
 
-  // Calculate today's sales based on the provided current local time
-  const todayDateString = '2025-07-03'; // Use the provided current local time as the source of truth
-  const todaysSales = recentSales
-    .filter(sale => {
-      // sale.date could be in different formats, so normalize
-      if (!sale.date) return false;
-      // Accept both ISO and local date strings
-      return sale.date.startsWith(todayDateString);
-    })
-    .reduce((sum, sale) => sum + (sale.amount || 0), 0);
-
   const statsData = [
     {
       title: t.todaysSales,
-      value: stats.todaySales,
+      value: `Rs. ${stats.todaySales.toLocaleString()}`,
       icon: ShoppingCartIcon,
       color: "text-green-600",
       bgColor: "bg-green-50"
     },
     {
+      title: t.monthlySales,
+      value: `Rs. ${stats.monthlySales.toLocaleString()}`,
+      icon: TrendingUpIcon,
+      color: "text-purple-600",
+      bgColor: "bg-purple-50"
+    },
+    {
       title: t.totalInventory,
-      value: stats.totalInventory,
+      value: stats.totalInventory.toLocaleString(),
       icon: PackageIcon,
       color: "text-blue-600",
       bgColor: "bg-blue-50"
     },
     {
       title: t.lowStock,
-      value: stats.lowStockItems,
+      value: stats.lowStockItems.toLocaleString(),
       icon: AlertTriangleIcon,
-      color: "text-yellow-600",
-      bgColor: "bg-yellow-50"
+      color: "text-amber-600",
+      bgColor: "bg-amber-50"
     },
     {
-      title: t.monthlyProfit,
-      value: stats.monthlyProfit,
-      icon: TrendingUpIcon,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
+      title: isUrdu ? "ختم ہو چکا" : "Out of Stock",
+      value: stats.outOfStockItems.toLocaleString(),
+      icon: AlertTriangleIcon,
+      color: "text-red-600",
+      bgColor: "bg-red-50"
+    },
+    {
+      title: "Total Stock Value",
+      value: `Rs. ${stats.totalStockValue.toLocaleString()}`,
+      icon: DollarSignIcon,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50"
     }
   ];
 
@@ -298,26 +330,21 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsData.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={index} className="transition-all hover:shadow-lg">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-full ${stat.bgColor}`}>
-                    <Icon className={`h-6 w-6 ${stat.color}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      {/* Stats Cards - Two rows of three cards each */}
+      <div className="space-y-4">
+        {/* First row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {statsData.slice(0, 3).map((stat, index) => (
+            <StatCard key={index} stat={stat} />
+          ))}
+        </div>
+        
+        {/* Second row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {statsData.slice(3).map((stat, index) => (
+            <StatCard key={index + 3} stat={stat} />
+          ))}
+        </div>
       </div>
 
       {/* Recent Activity */}
@@ -405,97 +432,19 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
         </Card>
       </div>
 
-      {/* Real-time Dashboard Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Today's Sales */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              {isUrdu ? 'آج کی فروخت' : "Today's Sales"}
-            </CardTitle>
-            <TrendingUpIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.isLoading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
-              <div className="text-2xl font-bold">
-                Rs. {stats.todaySales.toLocaleString()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Total Inventory */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              {isUrdu ? 'کل انوینٹری' : 'Total Inventory'}
-            </CardTitle>
-            <PackageIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.isLoading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {stats.totalInventory.toLocaleString()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Low Stock Items */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              {isUrdu ? 'کم اسٹاک اشیاء' : 'Low Stock Items'}
-            </CardTitle>
-            <AlertTriangleIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.isLoading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
-              <div className="text-2xl font-bold">
-                {stats.lowStockItems.toLocaleString()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Monthly Profit */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              {isUrdu ? 'ماہانہ منافع' : 'Monthly Profit'}
-            </CardTitle>
-            <ShoppingCartIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.isLoading ? (
-              <Skeleton className="h-8 w-full" />
-            ) : (
-              <div className="text-2xl font-bold">
-                Rs. {stats.monthlyProfit.toLocaleString()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="col-span-full text-right text-sm text-muted-foreground">
-          Last updated: {lastUpdated || 'Never'}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="ml-2"
-            onClick={fetchDashboardData}
-            disabled={stats.isLoading}
-          >
-            <RefreshCwIcon className={`h-4 w-4 mr-2 ${stats.isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+      {/* Last Updated and Refresh Button */}
+      <div className="text-right text-sm text-muted-foreground">
+        Last updated: {lastUpdated || 'Never'}
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="ml-2"
+          onClick={fetchDashboardData}
+          disabled={stats.isLoading}
+        >
+          <RefreshCwIcon className={`h-4 w-4 mr-2 ${stats.isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
     </div>
   );

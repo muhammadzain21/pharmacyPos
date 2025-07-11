@@ -12,6 +12,16 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get count of out of stock items
+router.get('/out-of-stock', async (req, res) => {
+  try {
+    const count = await Inventory.countDocuments({ stock: 0 });
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Add new inventory item
 router.post('/', async (req, res) => {
   try {

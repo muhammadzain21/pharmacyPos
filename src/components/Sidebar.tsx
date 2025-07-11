@@ -2,14 +2,14 @@ import React from 'react';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { 
-  LayoutDashboard, 
-  Package, 
-  ShoppingCart, 
-  Warehouse, 
-  Users, 
-  Building, 
-  FileBarChart, 
-  Settings, 
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Warehouse,
+  Users,
+  Building,
+  ShieldCheck,
+  Settings,
   LogOut,
   Clock,
   Calculator,
@@ -54,6 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       reports: 'Reports',
       auditLogs: 'Audit Logs',
       expenses: 'Expenses',
+      licenseManagement: 'Licenses',
       settings: 'Settings',
       logout: 'Logout',
       welcome: 'Welcome',
@@ -75,6 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       reports: 'رپورٹس',
       auditLogs: 'آڈٹ لاگز',
       expenses: 'اخراجات',
+      licenseManagement: 'لائسنس',
       settings: 'سیٹنگز',
       logout: 'لاگ آؤٹ',
       welcome: 'خوش آمدید',
@@ -90,19 +92,21 @@ const Sidebar: React.FC<SidebarProps> = ({
   const allMenuItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
     { id: 'medicines', label: t.medicines, icon: Package },
-    
+    { id: 'medicine-database', label: t.medicineDatabase, icon: Database },
     { id: 'pos', label: t.pos, icon: ShoppingCart },
     { id: 'inventory', label: t.inventory, icon: Warehouse },
     { id: 'prescriptions', label: t.prescriptions, icon: FileText },
     { id: 'customers', label: t.customers, icon: Users },
     { id: 'suppliers', label: t.suppliers, icon: Building },
+    { id: 'branches', label: t.branches, icon: Building2 },
     { id: 'staff-attendance', label: t.staffAttendance, icon: UserCheck },
     { id: 'tax-module', label: t.taxModule, icon: Receipt },
+    { id: 'reports', label: t.reports, icon: LineChart },
     { id: 'enhanced-reports', label: t.enhancedReports, icon: BarChart3 },
     { id: 'returns', label: t.returns, icon: ArrowLeftRight },
     { id: 'audit-logs', label: t.auditLogs, icon: Clock },
     { id: 'expenses', label: t.expenses, icon: Calculator },
-    { id: 'medicineDatabase', label: t.medicineDatabase, icon: Database },
+    { id: 'license-management', label: t.licenseManagement, icon: ShieldCheck },
     { id: 'settings', label: t.settings, icon: Settings }
   ];
 
@@ -116,12 +120,15 @@ const Sidebar: React.FC<SidebarProps> = ({
       allowedIds = [
         'dashboard',
         'medicines',
+        'medicine-database',
         'inventory',
         'prescriptions',
         'customers',
         'suppliers',
+        'branches',
         'staff-attendance',
         'returns',
+        'reports',
         'pos'
       ];
       break;

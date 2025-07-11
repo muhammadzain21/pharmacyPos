@@ -17,7 +17,8 @@ import {
   Download,
   RefreshCw,
   Plus,
-  Barcode
+  Barcode,
+  Trash2
 } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
 import { format } from 'date-fns';
@@ -686,20 +687,23 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
 
   // Calculate inventory metrics
   const inventoryValue = inventory.reduce((sum, item) => sum + ((item.price || 0) * (item.stock || 0)), 0);
-  const lowStockCount = inventory.filter(item => (item.stock || 0) > 0 && (item.stock || 0) <= (item.minStock || 0)).length;
+    const lowStockCount = inventory.filter(item => (item.stock ?? 0) > 0 && (item.stock ?? 0) <= (item.minStock ?? 0)).length;
   const expiringCount = inventory.filter(item => isExpiringSoon(item.expiryDate)).length;
-  const outOfStockCount = inventory.filter(item => item.stock === 0).length;
+  const outOfStockCount = inventory.filter(item => (item.stock ?? 0) === 0).length;
 
   const filterInventory = () => {
     const filteredItems = inventory.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (item.genericName?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-                          (item.category?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
-                          (item.barcode?.includes(searchTerm) ?? false);
+            const lowerSearch = searchTerm.trim().toLowerCase();
+      const matchesSearch = lowerSearch === '' || (
+        (item.name ?? '').toLowerCase().includes(lowerSearch) ||
+        (item.genericName ?? '').toLowerCase().includes(lowerSearch) ||
+        (item.category ?? '').toLowerCase().includes(lowerSearch) ||
+        (item.barcode ?? '').toLowerCase().includes(lowerSearch)
+      );
       
-      if (activeTab === 'low') return matchesSearch && item.stock <= (item.minStock || 5);
-      if (activeTab === 'expiring') return matchesSearch && isExpiringSoon(item.expiryDate || '');
-      if (activeTab === 'out') return matchesSearch && item.stock === 0;
+      if (activeTab === 'lowStock') return matchesSearch && (item.stock ?? 0) <= (item.minStock ?? 0);
+      if (activeTab === 'expiring') return matchesSearch && isExpiringSoon(item.expiryDate ?? '');
+      if (activeTab === 'outOfStock') return matchesSearch && (item.stock ?? 0) === 0;
       
       return matchesSearch;
     });
@@ -714,7 +718,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     isUrdu ? 'میں نے اس اسٹاک آئٹم کو چیک کر لیا ہے اور مستقل طور پر حذف کرنا چاہتا ہوں۔' : 'I have reviewed the item and wish to permanently delete it.'
   ];
 
-  const handleDeleteInventory = (id: number) => {
+  const handleDeleteInventory = (id: string | number) => {
     setDeleteTargetId(String(id));
     setShowDeleteDialog(true);
   };
@@ -807,7 +811,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       onStockAdded={loadInventory}
       onCancel={() => setIsAddDialogOpen(false)}
     />
-    <Button variant="outline">
+    <Button variant="outline" onClick={loadInventory}>
       <RefreshCw className="h-4 w-4 mr-2" />
       {t.refresh}
     </Button>
@@ -1097,9 +1101,13 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
                       </div>
                     </div>
                     
-                    <div className="text-center">
+                    <div className="text-center flex justify-center">
                       <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
                         {isUrdu ? 'ترمیم کریں' : 'Edit'}
+                      </Button>
+                      <Button variant="destructive" size="sm" className="ml-2" onClick={() => handleDeleteInventory(item.id)}>
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        {isUrdu ? 'حذف' : 'Delete'}
                       </Button>
                     </div>
                   </div>
@@ -1111,7 +1119,45 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       </TabsContent>
     </Tabs>
     
-    {/* Add Supplier Dialog */}
+    {/* Edit Item Dialog */}
+      {editItem && (
+        <Dialog open={!!editItem} onOpenChange={(open) => { if (!open) setEditItem(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{isUrdu ? 'آئٹم ترمیم کریں' : 'Edit Item'}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">{isUrdu ? 'اسٹاک' : 'Stock'}</Label>
+                <Input name="stock" type="number" min="0" value={editForm.stock} onChange={handleEditFormChange} className="col-span-3" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">{isUrdu ? 'یونٹ قیمت' : 'Unit Price'}</Label>
+                <Input name="unitPrice" type="number" min="0" step="0.01" value={editForm.unitPrice} onChange={handleEditFormChange} className="col-span-3" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">{isUrdu ? 'کم از کم اسٹاک' : 'Min Stock'}</Label>
+                <Input name="minStock" type="number" min="0" value={editForm.minStock} onChange={handleEditFormChange} className="col-span-3" />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">{isUrdu ? 'معیاد ختم ہونے کی تاریخ' : 'Expiry Date'}</Label>
+                <Input name="expiryDate" type="date" value={editForm.expiryDate} onChange={handleEditFormChange} className="col-span-3" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditItem(null)}>
+                {isUrdu ? 'منسوخ' : 'Cancel'}
+              </Button>
+              <Button onClick={handleUpdateItem}>
+                {isUrdu ? 'محفوظ کریں' : 'Save'}
+              </Button>
+            </div>
+          </DialogContent>
+          <DialogClose />
+        </Dialog>
+      )}
+
+      {/* Add Supplier Dialog */}
     <Dialog open={showAddSupplierDialog} onOpenChange={setShowAddSupplierDialog}>
       <DialogContent>
         <DialogHeader>

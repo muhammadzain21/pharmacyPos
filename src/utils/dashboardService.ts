@@ -25,6 +25,23 @@ export const getLowStockItems = async (threshold = 10): Promise<number> => {
 };
 
 /**
+ * Get count of out of stock items (stock === 0)
+ */
+export const getOutOfStockItems = async (): Promise<number> => {
+  try {
+    const response = await fetch('http://localhost:5000/api/inventory/out-of-stock');
+    if (!response.ok) {
+      throw new Error('Failed to fetch out of stock items');
+    }
+    const data = await response.json();
+    return data.count;
+  } catch (error) {
+    console.error('Error fetching out of stock items:', error);
+    return 0;
+  }
+};
+
+/**
  * Get monthly profit (sales - expenses for current month)
  */
 export const getMonthlyProfit = async (): Promise<number> => {
