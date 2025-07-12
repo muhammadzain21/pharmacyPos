@@ -3,7 +3,7 @@ import Sidebar from '../components/Sidebar';
 import Dashboard from '../components/Dashboard';
 import MedicineManagement from '../components/MedicineManagement';
 import POSSystem from '../components/POSSystem';
-import Reports from '../components/Reports';
+import SummaryReport from '@/components/SummaryReportClean';
 import Settings from '../components/Settings';
 import Login from '../components/Login';
 import Footer from '../components/Footer';
@@ -143,7 +143,7 @@ const Index = () => {
       case 'enhanced-reports':
         return <EnhancedReports isUrdu={isUrdu} />;
       case 'reports':
-        return <Reports isUrdu={isUrdu} />;
+        return <SummaryReport isUrdu={isUrdu} />;
       case 'audit-logs':
         return <AuditLogs isUrdu={isUrdu} />;
       case 'expenses':

@@ -38,9 +38,18 @@ export const authenticateUser = (
   email: string,
   password: string,
 ): User | null => {
-  const users = getUsers();
+  const normalizedEmail = email?.trim().toLowerCase();
+
+  if (!normalizedEmail) return null;
+
+  // Filter out any corrupted objects that may not have the required fields
+  const validUsers = getUsers().filter(
+    u => typeof u?.email === 'string' && typeof u?.password === 'string',
+  );
+
   return (
-    users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password) ||
-    null
+    validUsers.find(
+      u => u.email.trim().toLowerCase() === normalizedEmail && u.password === password,
+    ) || null
   );
 };

@@ -17,6 +17,7 @@ export interface InventoryItem {
   expiryDate?: string;
   manufacturingDate?: string;
   supplierName?: string;
+  status?: 'pending' | 'approved';
 }
 
 // Inventory CRUD logic is now handled by the backend API.
@@ -53,6 +54,7 @@ export const getInventory = async (): Promise<InventoryItem[]> => {
       expiryDate: record.expiryDate,
       manufacturingDate: record.manufacturingDate,
       supplierName: record.supplier?.name,
+      status: record.status ?? 'approved',
     })) as InventoryItem[];
   } catch (error) {
     console.error('Error fetching inventory:', error);

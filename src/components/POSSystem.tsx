@@ -237,7 +237,7 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       if (!customer) return null;
       
       // Get customer purchase history
-      const sales = JSON.parse(localStorage.getItem('sales') || '[]');
+      const sales = JSON.parse(localStorage.getItem('pharmacy_sales') || localStorage.getItem('sales') || '[]');
       const customerSales = sales.filter((s: any) => s.customerId === customer.id);
       
       // Get customer credit info
@@ -499,6 +499,21 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       }
 
       const savedSale = await response.json();
+
+      // Persist sale locally for reports/analytics
+      try {
+        const existingSales = JSON.parse(localStorage.getItem('pharmacy_sales') || '[]');
+        existingSales.push({
+          id: savedSale._id || Date.now().toString(),
+          date: savedSale.date || new Date().toISOString(),
+          items: cartItems.map(({ id, quantity, price }) => ({ medicineId: id, quantity, price })),
+          total,
+          customerId: customerInfo.id || customerInfo.name || null,
+        });
+        localStorage.setItem('pharmacy_sales', JSON.stringify(existingSales));
+      } catch (err) {
+        console.error('Failed to save sale locally:', err);
+      }
 
       // Dispatch custom event to signal sale completion for dashboard update
       window.dispatchEvent(new Event('saleCompleted'));

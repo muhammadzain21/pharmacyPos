@@ -41,20 +41,41 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [sales, setSales] = useState<Sale[]>([]);
   const { logAction } = useAuditLog();
 
-  // Load initial data
+    const API_BASE = (import.meta as any).env?.VITE_API_BASE || 'http://localhost:5000';
+
+  // Load initial data (prefer backend, fallback to localStorage)
   useEffect(() => {
-    const loadData = () => {
+    const loadExpenses = async () => {
       try {
-        const storedExpenses = localStorage.getItem('pharmacy_expenses');
-        if (storedExpenses) setExpenses(JSON.parse(storedExpenses));
+        const res = await fetch(`${API_BASE}/api/expenses`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setExpenses(data);
+            localStorage.setItem('pharmacy_expenses', JSON.stringify(data));
+            return;
+          }
+        }
+      } catch (e) {
+        /* ignore – will fallback */
+      }
+      // fallback
+      const storedExpenses = localStorage.getItem('pharmacy_expenses');
+      if (storedExpenses) setExpenses(JSON.parse(storedExpenses));
+    };
+
+    const loadSales = () => {
+      try {
         const storedSales = localStorage.getItem('pharmacy_sales');
         if (storedSales) setSales(JSON.parse(storedSales));
       } catch (err) {
-        console.error('Error loading data:', err);
+        console.error('Error loading sales:', err);
       }
     };
-    loadData();
-  }, []);
+
+    loadExpenses();
+    loadSales();
+  }, [API_BASE]);
 
   // Save data when changed
   useEffect(() => {
@@ -62,20 +83,64 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('pharmacy_sales', JSON.stringify(sales));
   }, [expenses, sales]);
 
-  const addExpense = (expense: Omit<Expense, 'id'>) => {
-    const newExpense = { ...expense, id: Date.now().toString() };
-    setExpenses(prev => [...prev, newExpense]);
+  const addExpense = async (expense: Omit<Expense, 'id'>) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(expense),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setExpenses(prev => {
+          const updated = [...prev, saved];
+          localStorage.setItem('pharmacy_expenses', JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        throw new Error('Network');
+      }
+    } catch {
+      // offline fallback – local only
+      const newExpense = { ...expense, id: Date.now().toString() } as Expense;
+      setExpenses(prev => {
+        const updated = [...prev, newExpense];
+        localStorage.setItem('pharmacy_expenses', JSON.stringify(updated));
+        return updated;
+      });
+    }
     logAction('EXPENSE_ADD', `Added expense: ${expense.type} (PKR ${expense.amount})`);
+    window.dispatchEvent(new Event('expenseChanged'));
   };
 
-  const updateExpense = (id: string, expense: Omit<Expense, 'id'>) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...expense, id } : e));
+  const updateExpense = async (id: string, expense: Omit<Expense, 'id'>) => {
+    try {
+      await fetch(`${API_BASE}/api/expenses/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(expense),
+      });
+    } catch {/* ignore offline */}
+    setExpenses(prev => {
+      const updated = prev.map(e => e.id === id ? { ...expense, id } : e);
+      localStorage.setItem('pharmacy_expenses', JSON.stringify(updated));
+      return updated;
+    });
     logAction('EXPENSE_UPDATE', `Updated expense: ${expense.type} (PKR ${expense.amount})`);
+    window.dispatchEvent(new Event('expenseChanged'));
   };
 
-  const deleteExpense = (id: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
+  const deleteExpense = async (id: string) => {
+    try {
+      await fetch(`${API_BASE}/api/expenses/${id}`, { method: 'DELETE' });
+    } catch {/* ignore offline */}
+    setExpenses(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      localStorage.setItem('pharmacy_expenses', JSON.stringify(updated));
+      return updated;
+    });
     logAction('EXPENSE_DELETE', `Deleted expense ID: ${id}`);
+    window.dispatchEvent(new Event('expenseChanged'));
   };
 
   const getExpensesByDateRange = (from: string, to: string) => {

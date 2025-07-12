@@ -21,6 +21,7 @@ import {
   Trash2
 } from 'lucide-react';
 import BarcodeScanner from './BarcodeScanner';
+import BulkImportDialog from './BulkImportDialog';
 import { format } from 'date-fns';
 import { useToast } from '@/components/ui/use-toast';
 import { DoubleConfirmDialog } from './ui/DoubleConfirmDialog';
@@ -50,6 +51,7 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded, onCancel 
   const [selectedMedicine, setSelectedMedicine] = useState<any | null>(null);
   const [stockQuantity, setStockQuantity] = useState<string>('');
   const [unitPrice, setUnitPrice] = useState<string>('');
+  const [totalPrice, setTotalPrice] = useState<string>('');
   const [salePrice, setSalePrice] = useState<string>('');
   const [lastPurchasePrice, setLastPurchasePrice] = useState<string>('');
   const [invoiceNumber, setInvoiceNumber] = useState<string>('');
@@ -104,7 +106,23 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded, onCancel 
   }
 };
 
-const handleAddStock = async () => {
+// sync prices helpers
+  const syncFromUnit = (qtyStr: string, unitStr: string) => {
+    const q = parseFloat(qtyStr);
+    const u = parseFloat(unitStr);
+    if (!isNaN(q) && !isNaN(u)) {
+      setTotalPrice((q * u).toFixed(2));
+    }
+  };
+  const syncFromTotal = (qtyStr: string, totalStr: string) => {
+    const q = parseFloat(qtyStr);
+    const t = parseFloat(totalStr);
+    if (!isNaN(q) && !isNaN(t) && q !== 0) {
+      setUnitPrice((t / q).toFixed(2));
+    }
+  };
+
+  const handleAddStock = async () => {
     console.log("handleAddStock called", { selectedMedicine, stockQuantity, unitPrice });
     if (!selectedMedicine || !stockQuantity || !unitPrice) {
       toast({
@@ -119,7 +137,7 @@ const handleAddStock = async () => {
       const supplier = showNewSupplierField ? newSupplierName : selectedSupplier;
       const medicineId = selectedMedicine._id || selectedMedicine.id;
 
-      const payload = { medicine: medicineId, quantity: parseInt(stockQuantity), unitPrice: parseFloat(unitPrice), supplier, minStock: minStock ? parseInt(minStock) : undefined, expiryDate: expiryDate || undefined };
+      const payload = { medicine: medicineId, quantity: parseInt(stockQuantity), unitPrice: parseFloat(unitPrice), totalPrice: parseFloat(totalPrice) || undefined, salePrice: parseFloat(salePrice) || undefined, supplier, minStock: minStock ? parseInt(minStock) : undefined, expiryDate: expiryDate || undefined, status: 'pending' };
       console.log('POST-payload', payload);
       await axios.post('/api/add-stock', payload);
       console.log('POST-success');
@@ -132,7 +150,7 @@ const handleAddStock = async () => {
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'Failed to add stock',
+        description: 'Failed to add inventory',
         variant: 'destructive',
       });
     }
@@ -142,16 +160,16 @@ const handleAddStock = async () => {
     <Dialog>
       <DialogTrigger asChild>
         <Button className="ml-2">
-          <Plus className="mr-2 h-4 w-4" /> Add Stock
+          <Plus className="mr-2 h-4 w-4" /> Add Inventory
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-3xl bg-white rounded-2xl border border-blue-100 shadow-xl p-8">
         <DialogHeader>
-          <DialogTitle>Add Stock</DialogTitle>
+          <DialogTitle className="text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent flex items-center gap-2"><Package className="w-7 h-7" /> Add Inventory</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           {/* Medicine selection */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="medicine" className="text-right">
               Medicine
             </Label>
@@ -162,7 +180,7 @@ const handleAddStock = async () => {
                 setSelectedMedicine(med);
               }}
             >
-              <SelectTrigger className="col-span-3">
+              <SelectTrigger className="sm:col-span-3">
                 <SelectValue placeholder="Select medicine" />
               </SelectTrigger>
               <SelectContent>
@@ -202,7 +220,7 @@ const handleAddStock = async () => {
           </div>
           
           {/* Quantity field */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="quantity" className="text-right">
               Quantity
             </Label>
@@ -210,15 +228,19 @@ const handleAddStock = async () => {
               id="quantity"
               type="number"
               min="1"
-              className="col-span-3"
+              className="sm:col-span-3"
               value={stockQuantity}
-              onChange={e => setStockQuantity(e.target.value)}
+              onChange={e => {
+                setStockQuantity(e.target.value);
+                syncFromUnit(e.target.value, unitPrice);
+                syncFromTotal(e.target.value, totalPrice);
+              }}
               placeholder="Enter quantity"
               required
             />
           </div>
           {/* Minimum Stock field */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="minStock" className="text-right">
               Minimum Stock
             </Label>
@@ -226,46 +248,75 @@ const handleAddStock = async () => {
               id="minStock"
               type="number"
               min="0"
-              className="col-span-3"
+              className="sm:col-span-3"
               value={minStock}
               onChange={e => setMinStock(e.target.value)}
               placeholder="Enter minimum stock"
             />
           </div>
           {/* Expiry Date field */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="expiryDate" className="text-right">
               Expiry Date
             </Label>
             <Input
               id="expiryDate"
               type="date"
-              className="col-span-3"
+              className="sm:col-span-3"
               value={expiryDate}
               onChange={e => setExpiryDate(e.target.value)}
               placeholder="Select expiry date"
             />
           </div>
-          {/* Unit Price field */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="unitPrice" className="text-right">
-              Unit Price
-            </Label>
+          {/* Pricing */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
+            <Label htmlFor="unitPrice" className="text-right">Unit Price</Label>
             <Input
               id="unitPrice"
               type="number"
               min="0"
               step="0.01"
-              className="col-span-3"
+              className="sm:col-span-3"
               value={unitPrice}
-              onChange={e => setUnitPrice(e.target.value)}
+              onChange={e => {
+                setUnitPrice(e.target.value);
+                syncFromUnit(stockQuantity, e.target.value);
+              }}
               placeholder="Enter unit price"
-              required
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
+            <Label htmlFor="totalPrice" className="text-right">Total Cost</Label>
+            <Input
+              id="totalPrice"
+              type="number"
+              min="0"
+              step="0.01"
+              className="sm:col-span-3"
+              value={totalPrice}
+              onChange={e => {
+                setTotalPrice(e.target.value);
+                syncFromTotal(stockQuantity, e.target.value);
+              }}
+              placeholder="Enter total cost"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
+            <Label htmlFor="salePrice" className="text-right">Sale Price</Label>
+            <Input
+              id="salePrice"
+              type="number"
+              min="0"
+              step="0.01"
+              className="sm:col-span-3"
+              value={salePrice}
+              onChange={e => setSalePrice(e.target.value)}
+              placeholder="Enter sale price"
             />
           </div>
           
           {/* Supplier selection */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="supplier" className="text-right">
               Supplier
             </Label>
@@ -315,7 +366,7 @@ const handleAddStock = async () => {
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={handleAddStock}>Add Stock</Button>
+          <Button onClick={handleAddStock}>Add Inventory</Button>
         </div>
       </DialogContent>
       <DialogClose />
@@ -631,6 +682,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       lowStock: 'Low Stock',
       expiring: 'Expiring Soon',
       outOfStock: 'Out of Stock',
+      review: 'Pending Review',
       stockValue: 'Total Stock Value',
       lowStockItems: 'Low Stock Items',
       expiringItems: 'Expiring Soon',
@@ -652,6 +704,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       lowStock: 'کم اسٹاک',
       expiring: 'ختم ہونے والی',
       outOfStock: 'اسٹاک ختم',
+      review: 'زیرِ جائزہ',
       stockValue: 'کل اسٹاک کی قیمت',
       lowStockItems: 'کم اسٹاک کی اشیاء',
       expiringItems: 'ختم ہونے والی اشیاء',
@@ -701,6 +754,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
         (item.barcode ?? '').toLowerCase().includes(lowerSearch)
       );
       
+      if (activeTab === 'review') return matchesSearch && (item.status ?? 'approved') === 'pending';
       if (activeTab === 'lowStock') return matchesSearch && (item.stock ?? 0) <= (item.minStock ?? 0);
       if (activeTab === 'expiring') return matchesSearch && isExpiringSoon(item.expiryDate ?? '');
       if (activeTab === 'outOfStock') return matchesSearch && (item.stock ?? 0) === 0;
@@ -752,6 +806,26 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
 
   const loadInventory = async () => {
     await refreshInventory();
+  };
+
+  const approveInventory = async (id: string | number) => {
+    try {
+      await axios.put(`/api/inventory/${id}`, { status: 'approved' });
+      await loadInventory();
+      toast({ title: 'Success', description: 'Inventory item approved' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to approve item', variant: 'destructive' });
+    }
+  };
+
+  const rejectInventory = async (id: string | number) => {
+    try {
+      await axios.put(`/api/inventory/${id}`, { status: 'rejected' });
+      await loadInventory();
+      toast({ title: 'Success', description: 'Inventory item rejected' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to reject item', variant: 'destructive' });
+    }
   };
 
   return (
@@ -806,11 +880,12 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
         </form>
       </DialogContent>
     </Dialog>
-    {/* Add Stock Button */}
+    {/* Add Inventory Button */}
     <AddStockDialog 
       onStockAdded={loadInventory}
       onCancel={() => setIsAddDialogOpen(false)}
     />
+    <BulkImportDialog onImported={loadInventory} />
     <Button variant="outline" onClick={loadInventory}>
       <RefreshCw className="h-4 w-4 mr-2" />
       {t.refresh}
@@ -1048,6 +1123,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       <TabsList>
         {[
           { id: 'all', label: t.all },
+          { id: 'review', label: t.review },
           { id: 'lowStock', label: t.lowStock },
           { id: 'expiring', label: t.expiring },
           { id: 'outOfStock', label: t.outOfStock }
@@ -1102,13 +1178,26 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
                     </div>
                     
                     <div className="text-center flex justify-center">
-                      <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
-                        {isUrdu ? 'ترمیم کریں' : 'Edit'}
-                      </Button>
-                      <Button variant="destructive" size="sm" className="ml-2" onClick={() => handleDeleteInventory(item.id)}>
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        {isUrdu ? 'حذف' : 'Delete'}
-                      </Button>
+                      {item.status === 'pending' ? (
+                        <>
+                          <Button size="sm" className="mr-2 bg-green-600 hover:bg-green-700 text-white" onClick={() => approveInventory(item.id)}>
+                            {isUrdu ? 'منظور' : 'Approve'}
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => rejectInventory(item.id)}>
+                            {isUrdu ? 'رد کریں' : 'Reject'}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => handleEditItem(item)}>
+                            {isUrdu ? 'ترمیم کریں' : 'Edit'}
+                          </Button>
+                          <Button variant="destructive" size="sm" className="ml-2" onClick={() => handleDeleteInventory(item.id)}>
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {isUrdu ? 'حذف' : 'Delete'}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -1127,21 +1216,21 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
               <DialogTitle>{isUrdu ? 'آئٹم ترمیم کریں' : 'Edit Item'}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
                 <Label className="text-right">{isUrdu ? 'اسٹاک' : 'Stock'}</Label>
-                <Input name="stock" type="number" min="0" value={editForm.stock} onChange={handleEditFormChange} className="col-span-3" />
+                <Input name="stock" type="number" min="0" value={editForm.stock} onChange={handleEditFormChange} className="sm:col-span-3" />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
                 <Label className="text-right">{isUrdu ? 'یونٹ قیمت' : 'Unit Price'}</Label>
-                <Input name="unitPrice" type="number" min="0" step="0.01" value={editForm.unitPrice} onChange={handleEditFormChange} className="col-span-3" />
+                <Input name="unitPrice" type="number" min="0" step="0.01" value={editForm.unitPrice} onChange={handleEditFormChange} className="sm:col-span-3" />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
                 <Label className="text-right">{isUrdu ? 'کم از کم اسٹاک' : 'Min Stock'}</Label>
-                <Input name="minStock" type="number" min="0" value={editForm.minStock} onChange={handleEditFormChange} className="col-span-3" />
+                <Input name="minStock" type="number" min="0" value={editForm.minStock} onChange={handleEditFormChange} className="sm:col-span-3" />
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
                 <Label className="text-right">{isUrdu ? 'معیاد ختم ہونے کی تاریخ' : 'Expiry Date'}</Label>
-                <Input name="expiryDate" type="date" value={editForm.expiryDate} onChange={handleEditFormChange} className="col-span-3" />
+                <Input name="expiryDate" type="date" value={editForm.expiryDate} onChange={handleEditFormChange} className="sm:col-span-3" />
               </div>
             </div>
             <div className="flex justify-end gap-2">

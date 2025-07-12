@@ -48,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       inventory: 'Inventory',
       customers: 'Customers',
       suppliers: 'Suppliers',
-      branches: 'Branches',
+      
       staffAttendance: 'Staff Attendance',
       taxModule: 'Tax Module',
       reports: 'Reports',
@@ -70,7 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       inventory: 'انوینٹری',
       customers: 'کسٹمرز',
       suppliers: 'سپلائرز',
-      branches: 'برانچز',
+      
       staffAttendance: 'عملے کی حاضری',
       taxModule: 'ٹیکس ماڈیول',
       reports: 'رپورٹس',
@@ -91,14 +91,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Define all possible menu items
   const allMenuItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'medicines', label: t.medicines, icon: Package },
     { id: 'medicine-database', label: t.medicineDatabase, icon: Database },
     { id: 'pos', label: t.pos, icon: ShoppingCart },
     { id: 'inventory', label: t.inventory, icon: Warehouse },
     { id: 'prescriptions', label: t.prescriptions, icon: FileText },
     { id: 'customers', label: t.customers, icon: Users },
     { id: 'suppliers', label: t.suppliers, icon: Building },
-    { id: 'branches', label: t.branches, icon: Building2 },
+   
     { id: 'staff-attendance', label: t.staffAttendance, icon: UserCheck },
     { id: 'tax-module', label: t.taxModule, icon: Receipt },
     { id: 'reports', label: t.reports, icon: LineChart },
@@ -119,13 +118,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     case 'pharmacist':
       allowedIds = [
         'dashboard',
-        'medicines',
-        'medicine-database',
+                'medicine-database',
         'inventory',
         'prescriptions',
         'customers',
         'suppliers',
-        'branches',
+        
         'staff-attendance',
         'returns',
         'reports',

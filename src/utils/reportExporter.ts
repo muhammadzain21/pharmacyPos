@@ -108,6 +108,7 @@ class ReportExporter {
       <html>
         <head>
           <title>${title}</title>
+          <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
           <style>
             body { font-family: 'Poppins', Arial, sans-serif; margin: 20px; }
             .header { text-align: center; margin-bottom: 20px; }
@@ -124,28 +125,28 @@ class ReportExporter {
             }
           </style>
         </head>
-        <body>
+        <body class="bg-gray-100">
           <div class="header">
-            <div class="title">${title}</div>
+            <div class="title text-blue-500">${title}</div>
     `;
     
     if (metadata) {
       pdfContent += '<div class="metadata">';
       Object.entries(metadata).forEach(([key, value]) => {
-        pdfContent += `<div><strong>${key}:</strong> ${value}</div>`;
+        pdfContent += `<div class="text-gray-600"><strong class="text-gray-900">${key}:</strong> ${value}</div>`;
       });
       pdfContent += '</div>';
     }
     
     pdfContent += `
           </div>
-          <table>
+          <table class="bg-white shadow-md rounded">
             <thead>
               <tr>
     `;
     
     headers.forEach(header => {
-      pdfContent += `<th>${header}</th>`;
+      pdfContent += `<th class="bg-blue-100 text-blue-500">${header}</th>`;
     });
     
     pdfContent += '</tr></thead><tbody>';
@@ -153,7 +154,7 @@ class ReportExporter {
     data.forEach(row => {
       pdfContent += '<tr>';
       row.forEach(cell => {
-        pdfContent += `<td>${cell}</td>`;
+        pdfContent += `<td class="border-b border-gray-200">${cell}</td>`;
       });
       pdfContent += '</tr>';
     });
