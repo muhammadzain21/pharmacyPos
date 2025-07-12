@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,23 +32,9 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [customers, setCustomers] = useState<any[]>([]);
-
-  const loadCustomers = async () => {
-    try {
-      const { data } = await axios.get('/api/customers');
-      setCustomers(data);
-    } catch (err) {
-      console.error('Failed to fetch customers', err);
-    }
-  };
-
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  
-
+  const [customers, setCustomers] = useState([
+    {
+      id: 1,
       name: 'Ahmad Hassan',
       phone: '+92-300-1234567',
       email: 'ahmad.hassan@gmail.com',
@@ -74,7 +59,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
       totalPurchases: 18,
       loyaltyPoints: 900
     }
-
+  ]);
 
   const text = {
     en: {
@@ -121,30 +106,37 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
 
   const t = isUrdu ? text.ur : text.en;
 
-  // Optionally keep offline backup
+  // Load customers from offline storage on mount
   useEffect(() => {
-    if (customers.length > 0) {
-      offlineManager.saveData('customers', customers);
+    const storedCustomers = offlineManager.getData('customers');
+    if (storedCustomers && storedCustomers.length > 0) {
+      setCustomers(storedCustomers);
     }
+  }, []);
+
+  // Save customers to offline storage whenever customers change
+  useEffect(() => {
+    offlineManager.saveData('customers', customers);
   }, [customers]);
 
   const filteredCustomers = customers.filter(customer =>
-    (customer.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (customer.phone || '').includes(searchTerm) ||
-    (customer.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.phone.includes(searchTerm) ||
+    customer.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSaveCustomer = async (customerData: any) => {
-    try {
-      if (editingCustomer) {
-        const { data: updated } = await axios.put(`/api/customers/${editingCustomer._id}`, customerData);
-        setCustomers(customers.map(c => (c._id === updated._id ? updated : c)));
-      } else {
-        const { data: created } = await axios.post('/api/customers', customerData);
-        setCustomers([created, ...customers]);
-      }
-    } catch (err) {
-      console.error('Failed to save customer', err);
+  const handleSaveCustomer = (customerData: any) => {
+    if (editingCustomer) {
+      setCustomers(customers.map(c => c.id === customerData.id ? customerData : c));
+    } else {
+      const newCustomer = {
+        ...customerData,
+        id: Math.max(...customers.map(c => c.id), 0) + 1,
+        createdAt: new Date().toISOString().split('T')[0],
+        totalPurchases: 0,
+        loyaltyPoints: 0
+      };
+      setCustomers([...customers, newCustomer]);
     }
     setEditingCustomer(null);
     setShowForm(false);
@@ -155,16 +147,11 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
     setShowForm(true);
   };
 
-  const handleDeleteCustomer = async (customerId: string) => {
-    try {
-      await axios.delete(`/api/customers/${customerId}`);
-      setCustomers(customers.filter(c => c._id !== customerId));
-      if (selectedCustomer?._id === customerId) setSelectedCustomer(null);
-    } catch (err) {
-      console.error('Failed to delete customer', err);
+  const handleDeleteCustomer = (customerId: number) => {
+    setCustomers(customers.filter(c => c.id !== customerId));
+    if (selectedCustomer?.id === customerId) {
+      setSelectedCustomer(null);
     }
-  };
-    
   };
 
   const handleExportReport = () => {
@@ -210,7 +197,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
           const loyaltyTier = getLoyaltyTier(customer.loyaltyPoints);
           
           return (
-            <Card key={customer._id || customer.id} className="hover:shadow-md transition-all animate-slide-in">
+            <Card key={customer.id} className="hover:shadow-md transition-all animate-slide-in">
               <CardContent className="p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center space-x-3">
@@ -278,7 +265,7 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
                 )}
 
                 <div className="flex justify-between items-center mt-4 pt-4 border-t">
-                  <span className="text-xs text-gray-500 font-poppins">ID: {customer._id || customer.id}</span>
+                  <span className="text-xs text-gray-500 font-poppins">ID: {customer.id}</span>
                   <div className="flex space-x-1">
                     <Button size="sm" variant="outline" onClick={() => setSelectedCustomer(customer)} className="touch-target">
                       <Eye className="h-3 w-3" />
