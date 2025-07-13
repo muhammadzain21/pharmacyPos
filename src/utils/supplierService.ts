@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 export interface UISupplier {
+  // "name" duplicated for components expecting simple name field (e.g., dropdowns)
+  name?: string;
   id: string;
   companyName: string;
   contactPerson?: string;
@@ -30,7 +32,9 @@ export const getSuppliers = async (): Promise<UISupplier[]> => {
   const res = await axios.get('/api/suppliers');
   // Normalize: ensure each supplier has _id or id
   return (res.data || []).map((s: any) => ({
+    // Basic identifiers
     id: s._id || s.id,
+    name: s.name,
     companyName: s.name,
     contactPerson: s.contactPerson,
     phone: s.phone,
@@ -49,7 +53,7 @@ export const getSuppliers = async (): Promise<UISupplier[]> => {
 // Add new supplier
 export const addSupplier = async (supplier: UISupplier) => {
   const payload = {
-    name: supplier.companyName,
+        name: supplier.companyName || supplier.name,
     contactPerson: supplier.contactPerson,
     phone: supplier.phone,
     email: supplier.email,
@@ -63,7 +67,7 @@ export const addSupplier = async (supplier: UISupplier) => {
 // Update existing supplier
 export const updateSupplier = async (id: string, supplier: Partial<UISupplier>) => {
   const payload = {
-    name: supplier.companyName,
+        name: supplier.companyName || supplier.name,
     contactPerson: supplier.contactPerson,
     phone: supplier.phone,
     email: supplier.email,

@@ -5,12 +5,14 @@ const SaleSchema = new mongoose.Schema({
     {
       medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory', required: true },
       quantity: { type: Number, required: true },
+      medicineName: { type: String },
       price: { type: Number, required: true },
     }
   ],
   totalAmount: { type: Number, required: true },
   paymentMethod: { type: String },
   customerId: { type: String },
+  customerName: { type: String },
   date: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
 });

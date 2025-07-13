@@ -35,7 +35,6 @@ interface InventoryControlProps {
 
 interface AddStockDialogProps {
   onStockAdded: () => void;
-  onCancel: () => void;
 }
 
 export type SupplierType = { _id?: string; id?: string; name: string };
@@ -43,7 +42,7 @@ export type SupplierType = { _id?: string; id?: string; name: string };
 import { getMedicines } from '@/utils/medicineService';
 import { getSuppliers } from '@/utils/supplierService';
 
-const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded, onCancel }) => {
+const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
   const [minStock, setMinStock] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [medicines, setMedicines] = useState<any[]>([]);
@@ -365,7 +364,9 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded, onCancel 
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
           <Button onClick={handleAddStock}>Add Inventory</Button>
         </div>
       </DialogContent>
@@ -883,7 +884,6 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     {/* Add Inventory Button */}
     <AddStockDialog 
       onStockAdded={loadInventory}
-      onCancel={() => setIsAddDialogOpen(false)}
     />
     <BulkImportDialog onImported={loadInventory} />
     <Button variant="outline" onClick={loadInventory}>

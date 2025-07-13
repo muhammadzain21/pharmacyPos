@@ -2,6 +2,19 @@ const express = require('express');
 const router = express.Router();
 const Customer = require('../models/Customer');
 
+// GET /api/customers/search?cnic=12345 - find by CNIC
+router.get('/search', async (req, res) => {
+  try {
+    const { cnic } = req.query;
+    if (!cnic) return res.status(400).json({ error: 'cnic required' });
+    const customer = await Customer.findOne({ cnic: cnic.trim() }).lean();
+    res.json(customer);
+  } catch (err) {
+    console.error('Error searching customer', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // GET /api/customers - get all customers
 router.get('/', async (req, res) => {
   try {

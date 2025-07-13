@@ -34,7 +34,20 @@ const Index = () => {
   
   const { logAction } = useAuditLog();
   
-  const [activeModule, setActiveModule] = useState('dashboard');
+    const [activeModule, setActiveModule] = useState(() => {
+    return localStorage.getItem('activeModule') || 'dashboard';
+  });
+
+  // Helper to change module and persist choice
+  const changeModule = (module: string) => {
+    setActiveModule(module);
+    localStorage.setItem('activeModule', module);
+  };
+
+  // Keep localStorage in sync in case activeModule changes elsewhere
+  useEffect(() => {
+    localStorage.setItem('activeModule', activeModule);
+  }, [activeModule]);
   const [isUrdu, setIsUrdu] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
@@ -56,6 +69,7 @@ const Index = () => {
     }
     
     localStorage.removeItem('pharmacy_user');
+    localStorage.removeItem('activeModule');
     setCurrentUser(null);
     setActiveModule('dashboard');
   };
@@ -183,7 +197,7 @@ const Index = () => {
     <div className={`min-h-screen flex bg-gray-50 dark:bg-gray-900 ${isUrdu ? 'rtl' : 'ltr'}`}>
       <Sidebar 
         activeModule={activeModule}
-        setActiveModule={setActiveModule}
+        setActiveModule={changeModule}
         currentUser={currentUser}
         onLogout={handleLogout}
         isUrdu={isUrdu}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { offlineManager } from '../utils/offlineManager';
+import { getCustomers, createCustomer, addCreditEntry } from '@/utils/customerApi';
 import { loyaltyManager } from '../utils/loyaltyManager';
 import { getInventory, searchInventory, updateItemStock, InventoryItem } from '@/utils/inventoryService';
 
@@ -47,7 +49,7 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
   // alias for compatibility with older grid rendering code
   const filteredMedicines = filteredItems;
   const [cartItems, setCartItems] = useState<any[]>([]);
-  const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', id: '', mrNumber: '' });
+  const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', id: '', mrNumber: '', email: '', address: '', cnic: '' });
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [amountReceived, setAmountReceived] = useState('');
@@ -56,6 +58,8 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [discount, setDiscount] = useState<number | string>('');
+  const [lookupTimer, setLookupTimer] = useState<NodeJS.Timeout | null>(null);
+  const [creditAmount, setCreditAmount] = useState<string>('');
   const [customerHistory, setCustomerHistory] = useState<{
     purchases: Array<{medicine: string, date: string, quantity: number, price: number}>,
     credit: {total: number, used: number, remaining: number}
@@ -94,6 +98,37 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
     }
   };
   
+    // CNIC auto-lookup
+  const handleCnicChange = (value: string) => {
+    setCustomerInfo({ ...customerInfo, cnic: value });
+    if (lookupTimer) clearTimeout(lookupTimer);
+    setLookupTimer(setTimeout(async () => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      try {
+        const res = await fetch(`http://localhost:5000/api/customers/search?cnic=${trimmed}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setCustomerInfo({
+              ...customerInfo,
+              id: data._id,
+              name: data.name,
+              phone: data.phone,
+              email: data.email,
+              address: data.address,
+              mrNumber: data.mrNumber,
+              cnic: data.cnic
+            });
+            setCustomerLoyalty(data.loyaltyPoints || 0);
+          }
+        }
+      } catch (err) {
+        console.error('CNIC lookup failed', err);
+      }
+    }, 400) as unknown as NodeJS.Timeout);
+  };
+
   // Handle barcode scan - this will be defined later in the component
   
   // Load inventory on component mount
@@ -295,7 +330,10 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
           name: customerData.customer.name,
           phone: customerData.customer.phone,
           id: customerData.customer.id,
-          mrNumber: customerData.customer.mrNumber
+          mrNumber: customerData.customer.mrNumber,
+          email: customerData.customer.email || '',
+          address: customerData.customer.address || '',
+          cnic: customerData.customer.cnic || ''
         });
         setCustomerHistory(customerData.history);
       } else {
@@ -517,12 +555,14 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       const salePayload = {
         items: cartItems.map(item => ({
           medicineId: item.id,
+          medicineName: item.name,
           quantity: item.quantity,
           price: item.price,
         })),
         totalAmount: total,
+        customerName: customerInfo.name || 'Walk-in',
         paymentMethod: paymentMethod,
-        customerId: customerInfo.id || customerInfo.name,
+        customerId: customerInfo.id || customerInfo.name || 'Walk-in',
       };
 
       // Send sale to the backend
@@ -546,9 +586,10 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
         existingSales.push({
           id: savedSale._id || Date.now().toString(),
           date: savedSale.date || new Date().toISOString(),
-          items: cartItems.map(({ id, quantity, price }) => ({ medicineId: id, quantity, price })),
+          items: cartItems.map(({ id, name, quantity, price }) => ({ medicineId: id, medicineName: name, quantity, price })),
           total,
-          customerId: customerInfo.id || customerInfo.name || null,
+          customerName: customerInfo.name || 'Walk-in',
+          customerId: customerInfo.id || customerInfo.name || 'Walk-in',
         });
         localStorage.setItem('pharmacy_sales', JSON.stringify(existingSales));
       } catch (err) {
@@ -568,7 +609,7 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
         id: savedSale._id, // Use backend ID for receipt
         date: new Date(savedSale.date),
         items: cartItems,
-        customerName: customerInfo.name,
+        customerName: customerInfo.name || 'Walk-in',
         customerPhone: customerInfo.phone,
         subtotal,
         discount: discountAmount,
@@ -587,7 +628,7 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       
       setShowPaymentDialog(false);
       setCartItems([]);
-      setCustomerInfo({ name: '', phone: '', id: '', mrNumber: '' });
+      setCustomerInfo({ name: '', phone: '', id: '', mrNumber: '', email: '', address: '', cnic: '' });
       setAmountReceived('');
       setLoyaltyDiscount(0);
       setCustomerLoyalty(null);
@@ -1007,34 +1048,36 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       {/* Enhanced Payment Dialog */}
       {showPaymentDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md animate-slide-in">
+            <Card className="w-full max-w-md max-h-[85vh] overflow-y-auto animate-slide-in">
             <CardHeader>
               <CardTitle className="font-poppins">{t.processPayment}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Select 
-                value={paymentMethod} 
-                onValueChange={(value) => setPaymentMethod(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isUrdu ? 'ادائیگی کی قسم' : 'Payment Type'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">{isUrdu ? 'نقد' : 'Cash'}</SelectItem>
-                  <SelectItem value="credit">{isUrdu ? 'کریڈٹ' : 'Credit'}</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <div>
-                <label className="block text-sm font-medium mb-2 font-poppins">{t.amountReceived}</label>
-                <Input 
-                  type="number" 
-                  value={amountReceived} 
-                  onChange={(e) => setAmountReceived(e.target.value)}
-                  placeholder="0.00"
-                  className="font-poppins"
-                />
+              <div className="flex space-x-2">
+                <Button 
+                  variant={paymentMethod==='cash' ? 'default' : 'outline'}
+                  onClick={()=>setPaymentMethod('cash')}
+                  className="flex-1 font-poppins"
+                >{isUrdu ? 'نقد' : 'Cash'}</Button>
+                <Button 
+                  variant={paymentMethod==='credit' ? 'default' : 'outline'}
+                  onClick={()=>setPaymentMethod('credit')}
+                  className="flex-1 font-poppins"
+                >{isUrdu ? 'کریڈٹ' : 'Credit'}</Button>
               </div>
+
+              {paymentMethod==='cash' && (
+                <div>
+                  <label className="block text-sm font-medium mb-2 font-poppins">{t.amountReceived}</label>
+                  <Input 
+                    type="number" 
+                    value={amountReceived} 
+                    onChange={(e) => setAmountReceived(e.target.value)}
+                    placeholder="0.00"
+                    className="font-poppins"
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium mb-2 font-poppins">{t.discount}</label>
@@ -1048,33 +1091,39 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
                 />
               </div>
 
-              <div className="bg-gray-50 p-4 rounded">
+              <div>
+                <label className="block text-sm font-medium mb-2 font-poppins">{isUrdu ? 'کسٹمر کا نام' : 'Customer Name'}</label>
+                <Input value={customerInfo.name} onChange={(e)=>setCustomerInfo({...customerInfo,name:e.target.value})} className="font-poppins" />
+              </div>
+
+              {paymentMethod === 'credit' && (
                 <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-poppins">{t.subtotal}:</span>
-                    <span className="font-poppins">PKR {subtotal.toFixed(2)}</span>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">{isUrdu ? 'فون نمبر' : 'Phone Number'}</label>
+                    <Input value={customerInfo.phone} onChange={(e)=>setCustomerInfo({...customerInfo,phone:e.target.value})} className="font-poppins" />
                   </div>
-                  <div className="flex justify-between">
-                    <span className="font-poppins">{t.discount}:</span>
-                    <span className="font-poppins">PKR {calculateDiscount().toFixed(2)}</span>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">Email</label>
+                    <Input value={customerInfo.email||''} onChange={(e)=>setCustomerInfo({...customerInfo,email:e.target.value})} className="font-poppins" />
                   </div>
-                  {loyaltyDiscountAmount > 0 && (
-                    <div className="flex justify-between text-green-600">
-                      <span className="font-poppins">{t.loyaltyDiscount}:</span>
-                      <span className="font-poppins">PKR {loyaltyDiscountAmount.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">{t.tax}:</span>
-                    <span className="font-medium">PKR {tax.toFixed(2)}</span>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">{isUrdu ? 'پتہ' : 'Address'}</label>
+                    <Textarea value={customerInfo.address||''} onChange={(e)=>setCustomerInfo({...customerInfo,address:e.target.value})} className="font-poppins" />
                   </div>
-                  <Separator />
-                  <div className="flex justify-between font-bold">
-                    <span className="font-poppins">{t.total}:</span>
-                    <span className="font-poppins">PKR {total.toFixed(2)}</span>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">CNIC</label>
+                    <Input value={customerInfo.cnic||''} onChange={(e)=>handleCnicChange(e.target.value)} className="font-poppins" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">MR #</label>
+                    <Input value={customerInfo.mrNumber} onChange={(e)=>setCustomerInfo({...customerInfo,mrNumber:e.target.value})} className="font-poppins" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 font-poppins">{isUrdu ? 'کریڈٹ رقم' : 'Credit Amount'}</label>
+                    <Input type="number" value={creditAmount} onChange={(e)=>setCreditAmount(e.target.value)} className="font-poppins" />
                   </div>
                 </div>
-              </div>
+              )}
 
               {paymentMethod === 'cash' && (
                 <div>

@@ -69,6 +69,12 @@ router.post('/', async (req, res) => {
             }
           }
         });
+        // --- UPDATE CUSTOMER TOTALS & LOYALTY ---
+        const points = Math.floor(savedSale.totalAmount / 100); // 1 point per 100 PKR
+        await Customer.findByIdAndUpdate(savedSale.customerId, {
+          $inc: { totalPurchases: savedSale.totalAmount, loyaltyPoints: points }
+        }).catch(err => console.error('Failed to update customer totals', err));
+        // --- END CUSTOMER TOTALS & LOYALTY UPDATE ---
       } catch (err) {
         console.error('Failed to add credit history:', err);
       }
@@ -131,8 +137,8 @@ router.get('/recent', async (req, res) => {
 
     const formatted = sales.map(s => ({
       id: s._id,
-      medicine: s.items.map(it => it.medicineId?.name || 'Unknown').join(', '),
-      customer: s.customerId || 'Walk-in',
+      medicine: s.items.map(it => it.medicineName || it.medicineId?.name || 'Unknown').join(', '),
+      customer: s.customerName || s.customerId || 'Walk-in',
       amount: s.totalAmount,
       date: new Date(s.date).toLocaleDateString(),
       time: new Date(s.date).toLocaleTimeString()
