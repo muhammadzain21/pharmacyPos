@@ -39,8 +39,13 @@ interface POSSystemProps {
 
 const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  // alias to maintain backward compatibility with existing code sections
+  const medicines = inventory;
+  // alias for compatibility with older grid rendering code
+  const filteredMedicines = filteredItems;
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [customerInfo, setCustomerInfo] = useState({ name: '', phone: '', id: '', mrNumber: '' });
   const [paymentMethod, setPaymentMethod] = useState('cash');
@@ -196,14 +201,14 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
   const t = isUrdu ? text.ur : text.en;
 
   // Use the shared inventory service for medicine data
-  const [medicines, setMedicines] = useState<InventoryItem[]>([]);
+  
   const [isLoading, setIsLoading] = useState(true);
 
   // Load inventory data
   useEffect(() => {
     const loadInventory = async () => {
       const inventory = await getInventory();
-      setMedicines(inventory);
+      setInventory(inventory);
       setIsLoading(false);
     };
     loadInventory();
@@ -215,9 +220,25 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  const filteredMedicines = searchTerm 
-    ? searchInventory(searchTerm) 
-    : medicines;
+  const [searchResults, setSearchResults] = useState<InventoryItem[] | null>(null);
+
+  useEffect(() => {
+    const fetchSearch = async () => {
+      if (searchTerm.trim()) {
+        try {
+          const res = await searchInventory(searchTerm.trim());
+          setSearchResults(res);
+        } catch {
+          setSearchResults([]);
+        }
+      } else {
+        setSearchResults(null);
+      }
+    };
+    fetchSearch();
+  }, [searchTerm]);
+
+  const displayItems = searchResults ?? inventory;
 
   // Load customer loyalty points when customer info changes
   useEffect(() => {
@@ -302,7 +323,7 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
       return;
     }
 
-    // Decrease stock immediately
+    // Decrease stock immediately (UI update)
     const updatedInventory = inventory.map(invItem => {
       if (invItem.id === medicine.id) {
         return { ...invItem, stock: invItem.stock - 1 };
@@ -311,11 +332,17 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
     });
     
     setInventory(updatedInventory);
+    setFilteredItems(updatedInventory);
+    // Persist deduction in backend
+    updateItemStock(String(medicine.id), -1);
     
     // Update cart
     const existingItem = cartItems.find(cartItem => cartItem.id === medicine.id);
     if (existingItem) {
-      setCartItems(cartItems.map(cartItem => 
+      // Persist stock for increment/decrement when already in cart
+        updateItemStock(String(medicine.id), -1);
+        setFilteredItems(updatedInventory);
+        setCartItems(cartItems.map(cartItem => 
         cartItem.id === medicine.id 
           ? { ...cartItem, quantity: cartItem.quantity + 1 } 
           : cartItem
@@ -328,7 +355,20 @@ const POSSystem: React.FC<POSSystemProps> = ({ isUrdu }) => {
   const updateQuantity = (id: string, change: number) => {
     setCartItems(cartItems.map(item => {
       if (String(item.id) === String(id)) {
-        const newQuantity = Math.max(0, item.quantity + change);
+        const prevQuantity = item.quantity;
+        const newQuantity = Math.max(0, prevQuantity + change);
+        if (newQuantity !== prevQuantity) {
+          // Persist stock change (negative when quantity increases, positive when decreases)
+          updateItemStock(String(id), -change);
+        }
+        const updatedInv2 = inventory.map(invItem => {
+          if (String(invItem.id) === String(id)) {
+            return { ...invItem, stock: invItem.stock - change };
+          }
+          return invItem;
+        });
+        setInventory(updatedInv2);
+        setFilteredItems(updatedInv2);
         return newQuantity === 0 ? null : { ...item, quantity: newQuantity };
       }
       return item;

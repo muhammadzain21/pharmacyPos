@@ -28,33 +28,32 @@ export interface InventoryItem {
 
 export const getInventory = async (): Promise<InventoryItem[]> => {
   try {
-    // Fetch all AddStock records which include populated medicine and supplier details
+    // Fetch inventory items
     const response = await fetch('/api/add-stock');
     if (!response.ok) {
       throw new Error('Failed to fetch inventory');
     }
 
     const records = await response.json();
-
-    // Transform AddStock records into the InventoryItem shape expected by the UI
+    // Transform AddStock records into InventoryItem shape for POS
     return records.map((record: any) => ({
       id: record._id,
-      name: record.medicine?.name || '',
-      genericName: record.medicine?.genericName || '',
-      price: record.unitPrice || 0,
-      stock: record.quantity || 0,
-      barcode: record.medicine?.barcode,
-      category: record.medicine?.category,
-      manufacturer: record.medicine?.manufacturer,
-      minStock: record.minStock ?? 0,
-      maxStock: record.maxStock ?? undefined,
+      name: record.medicine?.name || record.name || '',
+      genericName: record.medicine?.genericName || record.genericName || '',
+      price: record.unitPrice || record.price || 0,
+      stock: record.quantity || record.stock || 0,
+      barcode: record.medicine?.barcode || record.barcode,
+      category: record.medicine?.category || record.category,
+      manufacturer: record.medicine?.manufacturer || record.manufacturer,
+      minStock: record.minStock,
+      maxStock: record.maxStock,
       purchasePrice: record.unitPrice,
-      salePrice: record.salePrice ?? record.unitPrice,
-      batchNo: record.batchNo,
+      salePrice: record.salePrice ?? record.unitPrice ?? record.price,
+      batchNo: record.batchNo || record.batchNumber,
       expiryDate: record.expiryDate,
-      manufacturingDate: record.manufacturingDate,
-      supplierName: record.supplier?.name,
-      status: record.status ?? 'approved',
+      manufacturingDate: undefined,
+      supplierName: undefined,
+      status: record.status ?? 'approved'
     })) as InventoryItem[];
   } catch (error) {
     console.error('Error fetching inventory:', error);
@@ -113,7 +112,7 @@ export const addInventoryItem = async (item: Omit<InventoryItem, 'id'>): Promise
 
 export const updateItemStock = async (itemId: string, quantityChange: number): Promise<InventoryItem> => {
   try {
-    const response = await fetch(`/api/inventory/${itemId}/stock`, {
+    const response = await fetch(`/api/add-stock/${itemId}/quantity`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',

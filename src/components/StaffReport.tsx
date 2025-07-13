@@ -181,7 +181,7 @@ const StaffReport: React.FC<StaffReportProps> = ({ isUrdu, staffList, attendance
                 {filteredStaff.length > 0 ? (
                   filteredStaff.map(staff => (
                     <div 
-                      key={staff.id}
+                      key={staff._id ?? staff.id ?? staff.email ?? staff.phone}
                       className={`p-3 hover:bg-gray-50 cursor-pointer ${selectedStaff?.id === staff.id ? 'bg-blue-50' : ''}`}
                       onClick={() => setSelectedStaff(staff)}
                     >
@@ -191,7 +191,7 @@ const StaffReport: React.FC<StaffReportProps> = ({ isUrdu, staffList, attendance
                           (staff.position === 'pharmacist' ? 'فارماسسٹ' :
                            staff.position === 'assistant' ? 'اسسٹنٹ' :
                            staff.position === 'cashier' ? 'کیشیئر' : 'منیجر') :
-                          staff.position.charAt(0).toUpperCase() + staff.position.slice(1)
+                          staff.position ? staff.position.charAt(0).toUpperCase() + staff.position.slice(1) : '—'
                         }
                       </div>
                     </div>
@@ -221,7 +221,7 @@ const StaffReport: React.FC<StaffReportProps> = ({ isUrdu, staffList, attendance
                             (selectedStaff.position === 'pharmacist' ? 'فارماسسٹ' :
                              selectedStaff.position === 'assistant' ? 'اسسٹنٹ' :
                              selectedStaff.position === 'cashier' ? 'کیشیئر' : 'منیجر') :
-                            selectedStaff.position.charAt(0).toUpperCase() + selectedStaff.position.slice(1)
+                            selectedStaff.position ? selectedStaff.position.charAt(0).toUpperCase() + selectedStaff.position.slice(1) : '—'
                         }</div>
                         <div><span className="text-gray-600">{t.basicSalary}:</span> {selectedStaff.salary} PKR</div>
                       </div>

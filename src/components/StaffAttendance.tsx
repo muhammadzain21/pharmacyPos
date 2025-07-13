@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
+import { getDailyAttendance } from '@/utils/staffService';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +24,9 @@ import {
   Calendar as CalendarIcon
 } from 'lucide-react';
 import { MonthYearPicker } from '@/components/ui/month-year-picker';
+import type { UIStaff } from '@/utils/staffService';
+import ConfirmStaffDeleteDialog from './ConfirmStaffDeleteDialog';
+import { getStaff as fetchStaff, addStaff as apiAddStaff, updateStaff as apiUpdateStaff, deleteStaff as apiDeleteStaff, clockIn as apiClockIn, clockOut as apiClockOut } from '@/utils/staffService';
 import AttendanceForm from './AttendanceForm';
 import StaffForm from './StaffForm';
 import StaffReport from './StaffReport';
@@ -98,6 +103,8 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
   const [salaryDataState, setSalaryDataState] = useState({ amount: 0, bonus: 0, month: '' });
   const [salaryRecords, setSalaryRecords] = useState<any[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  // backend-driven attendance
+  const [dailyRows, setDailyRows] = useState<any[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
   const [showProfile, setShowProfile] = useState(false);
 
@@ -169,10 +176,20 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
     };
   };
 
-  const [staff, setStaff] = useState(loadInitialData().staff);
+  const [staff, setStaff] = useState<any[]>([]);
   const [salaries, setSalaries] = useState(loadInitialData().salaries);
   const [leaves, setLeaves] = useState(loadInitialData().leaves);
   const [deductions, setDeductions] = useState(loadInitialData().deductions);
+
+  // --- Load staff list from backend on mount ---
+  useEffect(() => {
+    fetchStaff()
+      .then(setStaff)
+      .catch(err => {
+        console.error('Failed to fetch staff list from backend, falling back to local data', err);
+        setStaff(loadInitialData().staff);
+      });
+  }, []);
 
   // Save to localStorage whenever staff or attendance changes
   useEffect(() => {
@@ -307,6 +324,35 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
     record => record.date === new Date().toISOString().split('T')[0]
   );
 
+  // Save / update staff via backend
+  const handleSaveStaff = async (formData: any) => {
+    try {
+      // sanitize payload
+      // map only allowed fields
+      const payload: any = {
+        name: formData.name.trim(),
+        designation: formData.position,
+        phone: formData.phone?.trim() || undefined,
+        email: formData.email?.trim() || undefined,
+        address: formData.address?.trim() || undefined,
+        status: formData.status || 'active',
+      } as any;
+      if (formData.salary) payload.salary = Number(formData.salary);
+      if (formData.joinDate) payload.joinDate = new Date(formData.joinDate);
+      
+
+      if (editingStaff && editingStaff._id) {
+        await apiUpdateStaff(editingStaff._id, payload);
+      } else {
+        await apiAddStaff(payload);
+      }
+      const refreshed = await fetchStaff();
+      setStaff(refreshed);
+    } catch (err) {
+      console.error('Failed to save staff:', err);
+    }
+  };
+
   const handleAddAttendance = (attendanceData: any) => {
     try {
       const newId = attendanceRecords.length > 0 ? Math.max(...attendanceRecords.map(a => a.id)) + 1 : 1;
@@ -346,22 +392,43 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
     }
   };
 
-  const handleSaveStaff = (staffData: any) => {
-    if (editingStaff) {
-      setStaff(staff.map(s => s.id === staffData.id ? staffData : s));
-    } else {
-      setStaff([...staff, staffData]);
-    }
-    setEditingStaff(null);
-  };
+
 
   const handleEditStaff = (staffMember: any) => {
     setEditingStaff(staffMember);
     setShowStaffForm(true);
   };
 
-  const handleDeleteStaff = (staffId: number) => {
-    setStaff(staff.filter(s => s.id !== staffId));
+  // ---- Delete staff helpers ----
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<UIStaff | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!staffToDelete) return;
+    try {
+      if (staffToDelete._id) {
+        await apiDeleteStaff(staffToDelete._id);
+      }
+      setStaff(prev => prev.filter(s => s._id !== staffToDelete?._id));
+      toast({
+        title: isUrdu ? 'اسٹاف حذف ہو گیا' : 'Staff deleted',
+        variant: 'default'
+      });
+    } catch (err) {
+      console.error('Failed to delete staff:', err);
+      toast({
+        title: isUrdu ? 'حذف ناکام ہو گیا' : 'Failed to delete staff',
+        variant: 'destructive'
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setStaffToDelete(null);
+    }
+  };
+
+  const handleRequestDeleteStaff = (staffMember: UIStaff) => {
+    setStaffToDelete(staffMember);
+    setDeleteDialogOpen(true);
   };
 
   const handleTimeAction = async (record: any, action: 'checkIn' | 'checkOut') => {
@@ -723,6 +790,11 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
     }
   };
 
+  // fetch today on mount
+  useEffect(() => {
+    getDailyAttendance().then(setDailyRows).catch(console.error);
+  }, []);
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -752,7 +824,7 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {todaysAttendance.length > 0 ? (
+              {dailyRows.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -763,15 +835,15 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {todaysAttendance.map((record) => (
-                      <TableRow key={record.id}>
-                        <TableCell>{record.staffName}</TableCell>
+                    {dailyRows.map((record) => (
+                      <TableRow key={record.staffId}>
+                        <TableCell>{record.name}</TableCell>
                         <TableCell>
                           <Badge variant={record.status === 'present' ? 'default' : 'destructive'}>
                             {record.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{new Date(record.timestamp).toLocaleTimeString()}</TableCell>
+                        <TableCell>{record.checkIn ?? '--:--'} - {record.checkOut ?? '--:--'}</TableCell>
                         <TableCell>{record.notes}</TableCell>
                       </TableRow>
                     ))}
@@ -938,8 +1010,49 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredStaff.map((staffMember) => (
-              <Card key={staffMember.id} className="hover:shadow-md transition-all">
+              <Card key={staffMember._id ?? staffMember.id ?? staffMember.email ?? staffMember.phone} className="hover:shadow-md transition-all">
                 <CardContent className="p-6">
+                  {(() => {
+                    const today = new Date();
+                    const dateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+                    const attendanceToday = staffMember.attendance?.find((a: any) => new Date(a.date).toISOString() === dateOnly);
+                    if(!staffMember._id) return; // skip for local-only records
+                    const handleClockIn = async () => {
+                      setLoadingButton(staffMember._id + '-in');
+                      try {
+                        const updated = await apiClockIn(staffMember._id);
+                        setStaff(prev => prev.map(s => s._id === staffMember._id ? { ...s, attendance: [...(s.attendance || []).filter((a:any)=> new Date(a.date).toISOString()!==dateOnly), updated] } : s));
+                        toast({ title: 'Clocked in', description: `${staffMember.name} clocked in at ${updated.checkIn}` });
+                      } catch (err:any) {
+                        toast({ variant:'destructive', title:'Clock in failed', description: err.response?.data?.message||err.message });
+                      } finally { setLoadingButton(null);} };
+                    if(!staffMember._id) return;
+                    const handleClockOut = async () => {
+                      setLoadingButton(staffMember._id + '-out');
+                      try {
+                        const updated = await apiClockOut(staffMember._id);
+                        setStaff(prev => prev.map(s => s._id === staffMember._id ? { ...s, attendance: [...(s.attendance || []).filter((a:any)=> new Date(a.date).toISOString()!==dateOnly), updated] } : s));
+                        toast({ title: 'Clocked out', description: `${staffMember.name} clocked out at ${updated.checkOut}` });
+                      } catch (err:any) {
+                        toast({ variant:'destructive', title:'Clock out failed', description: err.response?.data?.message||err.message });
+                      } finally { setLoadingButton(null);} };
+                    return (
+                      <div className="mb-4">
+                        {attendanceToday ? (
+                          <div className="space-y-1 text-sm text-gray-700">
+                            <div>Check-in: {attendanceToday.checkIn ?? '—'}</div>
+                            <div>Check-out: {attendanceToday.checkOut ?? '—'}</div>
+                          </div>
+                        ) : null}
+                        {/* clock buttons */}
+                        {staffMember._id && (!attendanceToday || !attendanceToday.checkIn) ? (
+                          <Button size="sm" className="mt-2" disabled={loadingButton===staffMember._id+'-in'} onClick={handleClockIn}>Clock In</Button>
+                        ) : staffMember._id && !attendanceToday.checkOut ? (
+                          <Button variant="outline" size="sm" className="mt-2" disabled={loadingButton===staffMember._id+'-out'} onClick={handleClockOut}>Clock Out</Button>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -980,7 +1093,7 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
                       <Button size="sm" variant="outline" onClick={() => handleEditStaff(staffMember)}>
                         <Edit className="h-3 w-3" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleRequestDelete(staffMember)}>
+                      <Button size="sm" variant="outline" onClick={() => handleRequestDeleteStaff(staffMember)}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => {
@@ -1099,6 +1212,19 @@ const StaffAttendance: React.FC<StaffAttendanceProps> = ({ isUrdu }) => {
           }}
           onSave={handleSaveStaff}
           staff={editingStaff}
+        />
+      )}
+
+      {deleteDialogOpen && staffToDelete && (
+        <ConfirmStaffDeleteDialog
+          isOpen={deleteDialogOpen}
+          staffName={staffToDelete.name}
+          isUrdu={isUrdu}
+          onCancel={() => {
+            setDeleteDialogOpen(false);
+            setStaffToDelete(null);
+          }}
+          onConfirm={handleConfirmDelete}
         />
       )}
 

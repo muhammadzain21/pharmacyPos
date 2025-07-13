@@ -9,19 +9,40 @@ export const getTodaySales = async (): Promise<number> => {
 };
 
 /**
- * Get total inventory count
+ * Get total inventory quantity (sum of all quantities in stock)
  */
 export const getTotalInventory = async (): Promise<number> => {
-  // TODO: Implement backend API call for total inventory count
-  return 0;
+  try {
+    const response = await fetch('http://localhost:5000/api/add-stock');
+    if (!response.ok) {
+      throw new Error('Failed to fetch inventory');
+    }
+    const items = await response.json();
+    return items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+  } catch (error) {
+    console.error('Error calculating total inventory:', error);
+    return 0;
+  }
 };
 
 /**
  * Get count of low stock items (stock < threshold)
  */
 export const getLowStockItems = async (threshold = 10): Promise<number> => {
-  // TODO: Implement backend API call for low stock items if needed.
-  return 0;
+  try {
+    const response = await fetch('http://localhost:5000/api/add-stock');
+    if (!response.ok) {
+      throw new Error('Failed to fetch inventory');
+    }
+    const items = await response.json();
+    return items.filter((item: any) => {
+      const min = item.minStock ?? threshold;
+      return (item.quantity ?? 0) > 0 && (item.quantity ?? 0) < min;
+    }).length;
+  } catch (error) {
+    console.error('Error calculating low stock items:', error);
+    return 0;
+  }
 };
 
 /**
@@ -29,14 +50,14 @@ export const getLowStockItems = async (threshold = 10): Promise<number> => {
  */
 export const getOutOfStockItems = async (): Promise<number> => {
   try {
-    const response = await fetch('http://localhost:5000/api/inventory/out-of-stock');
+    const response = await fetch('http://localhost:5000/api/add-stock');
     if (!response.ok) {
-      throw new Error('Failed to fetch out of stock items');
+      throw new Error('Failed to fetch inventory');
     }
-    const data = await response.json();
-    return data.count;
+    const items = await response.json();
+    return items.filter((item: any) => (item.quantity ?? 0) === 0).length;
   } catch (error) {
-    console.error('Error fetching out of stock items:', error);
+    console.error('Error calculating out of stock items:', error);
     return 0;
   }
 };

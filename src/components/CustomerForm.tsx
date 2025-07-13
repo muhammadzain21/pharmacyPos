@@ -63,7 +63,6 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ isUrdu, onClose, onSave, cu
     e.preventDefault();
     onSave({
       ...formData,
-      id: customer?.id || Date.now(),
       createdAt: customer?.createdAt || new Date().toISOString()
     });
     onClose();

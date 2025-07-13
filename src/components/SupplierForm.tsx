@@ -29,8 +29,8 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ isUrdu, onClose, onSave, su
   const text = {
     en: {
       title: supplier ? 'Edit Supplier' : 'Add Supplier',
-      companyName: 'Company Name',
-      contactPerson: 'Contact Person',
+      companyName: 'Supplier Name',
+      contactPerson: 'Company Name',
       phone: 'Phone Number',
       email: 'Email',
       address: 'Address',
@@ -43,8 +43,8 @@ const SupplierForm: React.FC<SupplierFormProps> = ({ isUrdu, onClose, onSave, su
     },
     ur: {
       title: supplier ? 'سپلائر میں تبدیلی' : 'سپلائر شامل کریں',
-      companyName: 'کمپنی کا نام',
-      contactPerson: 'رابطہ کار',
+      companyName: 'سپلائر کا نام',
+      contactPerson: 'کمپنی کا نام',
       phone: 'فون نمبر',
       email: 'ای میل',
       address: 'پتہ',

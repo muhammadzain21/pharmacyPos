@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { getSuppliers, addSupplier, updateSupplier, deleteSupplier, UISupplier } from '@/utils/supplierService';
+import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,86 +47,19 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<any>(null);
-  const [suppliers, setSuppliers] = useState<Array<{
-    id: number;
-    companyName: string;
-    contactPerson: string;
-    phone: string;
-    email: string;
-    address: string;
-    taxId: string;
-    totalPurchases: number;
-    pendingPayments: number;
-    lastOrder: string;
-    status: 'active' | 'inactive';
-    supplies: Array<{
-      name: string;
-      cost: number;
-      quantity: number;
-      inventoryId?: number;
-    }>;
-    purchases: Array<{
-      date: string;
-      amount: number;
-      items: string;
-      invoice: string;
-    }>;
-  }>>([]);
+  const [suppliers, setSuppliers] = useState<UISupplier[]>([]);
 
-  // Load suppliers from localStorage on component mount
+  // Load suppliers from backend on component mount
   useEffect(() => {
-    const savedSuppliers = localStorage.getItem('pharmacy_suppliers');
-    if (savedSuppliers) {
-      setSuppliers(JSON.parse(savedSuppliers));
-    } else {
-      // Default suppliers if no data in localStorage
-      const defaultSuppliers = [
-        {
-          id: 1,
-          companyName: 'PharmaCorp Ltd',
-          contactPerson: 'Mr. Hassan Ali',
-          phone: '+92-21-34567890',
-          email: 'hassan@pharmacorp.com',
-          address: 'Industrial Area, Karachi',
-          taxId: 'NTN-1234567',
-          totalPurchases: 2500000.00,
-          pendingPayments: 125000.00,
-          lastOrder: '2024-12-08',
-          status: 'active' as const,
-          supplies: [
-            { name: 'Antibiotics', cost: 120, quantity: 100 },
-            { name: 'Pain killers', cost: 80, quantity: 200 },
-            { name: 'Vitamins', cost: 50, quantity: 150 }
-          ],
-          purchases: [
-            { date: '2024-12-08', amount: 125000.00, items: 'Antibiotics, Pain killers', invoice: 'INV-001' },
-            { date: '2024-11-25', amount: 85000.00, items: 'Vitamins, Syrups', invoice: 'INV-002' }
-          ]
-        },
-        {
-          id: 2,
-          companyName: 'MediSupply Solutions',
-          contactPerson: 'Ms. Ayesha Khan',
-          phone: '+92-42-87654321',
-          email: 'ayesha@medisupply.com',
-          address: 'Medical Complex, Lahore',
-          taxId: 'NTN-7654321',
-          totalPurchases: 1850000.00,
-          pendingPayments: 0.00,
-          lastOrder: '2024-12-06',
-          status: 'active' as const,
-          supplies: [
-            { name: 'Surgical supplies', cost: 200, quantity: 50 },
-            { name: 'Bandages', cost: 30, quantity: 300 }
-          ],
-          purchases: [
-            { date: '2024-12-06', amount: 95000.00, items: 'Surgical supplies', invoice: 'INV-003' }
-          ]
-        }
-      ];
-      setSuppliers(defaultSuppliers);
-      localStorage.setItem('pharmacy_suppliers', JSON.stringify(defaultSuppliers));
-    }
+    const loadBackendSuppliers = async () => {
+      try {
+        const list = await getSuppliers();
+        setSuppliers(list);
+      } catch (err) {
+        console.error('Failed to fetch suppliers from backend:', err);
+      }
+    };
+    loadBackendSuppliers();
   }, []);
 
   // Save suppliers to localStorage whenever they change
@@ -191,36 +126,36 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
     (supplier.phone && supplier.phone.includes(searchTerm))
   );
 
-  const handleSaveSupplier = (supplierData: any) => {
+  const handleSaveSupplier = async (supplierData: any) => {
     if (editingSupplier) {
-      // Update existing supplier
-      const updatedSuppliers = suppliers.map(supplier => 
-        supplier.id === editingSupplier.id ? supplierData : supplier
-      );
-      setSuppliers(updatedSuppliers);
-      
+      // Update existing supplier via backend
+      try {
+        await updateSupplier(editingSupplier.id, supplierData);
+        const refreshed = await getSuppliers();
+        setSuppliers(refreshed);
+      } catch (err) {
+        console.error('Failed to update supplier:', err);
+        window.alert('Error updating supplier.');
+      }
       logAction('EDIT_SUPPLIER', 
         isUrdu ? `سپلائر اپ ڈیٹ کیا گیا: ${supplierData.companyName}` : `Updated supplier: ${supplierData.companyName}`,
         'supplier',
-        editingSupplier.id.toString()
+        editingSupplier.id
       );
     } else {
-      // Add new supplier
-      const newSupplier = {
-        ...supplierData,
-        id: Date.now(),
-        totalPurchases: 0,
-        pendingPayments: 0,
-        lastOrder: '',
-        status: 'active',
-        purchases: []
-      };
-      setSuppliers([...suppliers, newSupplier]);
+      // Add new supplier via backend
+      try {
+        await addSupplier(supplierData);
+        const refreshed = await getSuppliers();
+        setSuppliers(refreshed);
+      } catch (err) {
+        console.error('Failed to add supplier:', err);
+        window.alert('Error adding supplier.');
+      }
       
       logAction('ADD_SUPPLIER', 
         isUrdu ? `نیا سپلائر شامل کیا گیا: ${supplierData.companyName}` : `Added new supplier: ${supplierData.companyName}`,
-        'supplier',
-        newSupplier.id.toString()
+        'supplier'
       );
     }
     
@@ -228,27 +163,38 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
     setShowForm(false);
   };
 
+  // Delete dialog state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<UISupplier | null>(null);
+
   const handleEditSupplier = (supplier: any) => {
     setEditingSupplier(supplier);
     setShowForm(true);
   };
 
-  const handleDeleteSupplier = (id: number) => {
-    if (window.confirm(isUrdu ? 'کیا آپ واقعی یہ سپلائر حذف کرنا چاہتے ہیں؟' : 'Are you sure you want to delete this supplier?')) {
-      const supplierToDelete = suppliers.find(s => s.id === id);
-      const updatedSuppliers = suppliers.filter(supplier => supplier.id !== id);
-      setSuppliers(updatedSuppliers);
-      
-      logAction('DELETE_SUPPLIER', 
-        isUrdu ? `سپلائر حذف کیا گیا: ${supplierToDelete?.companyName}` : `Deleted supplier: ${supplierToDelete?.companyName}`,
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    try {
+      await deleteSupplier(id);
+      const refreshed = await getSuppliers();
+      setSuppliers(refreshed);
+      logAction('DELETE_SUPPLIER',
+        isUrdu ? `سپلائر حذف کیا گیا: ${deleteTarget.companyName}` : `Deleted supplier: ${deleteTarget.companyName}`,
         'supplier',
-        id.toString()
-      );
-      
-      if (selectedSupplier?.id === id) {
-        setSelectedSupplier(null);
-      }
+        id);
+      if (selectedSupplier?.id === id) setSelectedSupplier(null);
+    } catch (err) {
+      console.error('Failed to delete supplier:', err);
+      window.alert('Error deleting supplier.');
     }
+    setShowDeleteDialog(false);
+    setDeleteTarget(null);
+  };
+
+  const handleDeleteSupplier = (supplier: UISupplier) => {
+    setDeleteTarget(supplier);
+    setShowDeleteDialog(true);
   };
 
   // --- Handler to add a new order to the supplier and update inventory ---
@@ -266,7 +212,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
         return {
           ...sup,
           purchases: [
-            ...sup.purchases,
+            ...((sup.purchases) ?? []),
             {
               date: new Date().toISOString().split('T')[0],
               amount: newOrder.amount,
@@ -281,10 +227,10 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
     setSuppliers(updatedSuppliers);
     localStorage.setItem('pharmacy_suppliers', JSON.stringify(updatedSuppliers));
 
-    logAction('ADD_ORDER', 
+    logAction('ORDER_ADD', 
       isUrdu ? `نیا آرڈر شامل کیا گیا: ${newOrder.invoice}` : `Added new order: ${newOrder.invoice}`,
       'supplier',
-      selectedSupplier.id.toString()
+      selectedSupplier.id
     );
 
     // --- Inventory linkage: increase stock for each item ---
@@ -324,10 +270,10 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
     setSuppliers(updatedSuppliers);
     localStorage.setItem('pharmacy_suppliers', JSON.stringify(updatedSuppliers));
 
-    logAction('ADD_SUPPLIED_ITEM', 
+    logAction('SUPPLY_ADD', 
       isUrdu ? `نیا سپلائی کا سامان شامل کیا گیا: ${newSupply.name}` : `Added new supplied item: ${newSupply.name}`,
       'supplier',
-      selectedSupplier.id.toString()
+      selectedSupplier.id
     );
 
     // --- Inventory linkage ---
@@ -503,7 +449,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
                       <Button size="sm" variant="outline" onClick={() => handleEditSupplier(supplier)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleDeleteSupplier(supplier.id)}>
+                      <Button size="sm" variant="outline" onClick={() => handleDeleteSupplier(supplier)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -650,7 +596,7 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
                                 </div>
                                 <p className="text-xs text-blue-600">{purchase.invoice}</p>
                               </div>
-                              <p className="text-xs text-gray-500">{purchase.date}</p>
+                              <p className="text-xs text-gray-600">{purchase.date}</p>
                             </div>
                           </div>
                         );
@@ -693,6 +639,16 @@ const SupplierManagement: React.FC<SupplierManagementProps> = ({ isUrdu }) => {
           </div>
         )}
       </div>
+
+      {showDeleteDialog && deleteTarget && (
+        <ConfirmDeleteDialog
+          isOpen={showDeleteDialog}
+          supplierName={deleteTarget.companyName}
+          isUrdu={isUrdu}
+          onCancel={() => { setShowDeleteDialog(false); setDeleteTarget(null); }}
+          onConfirm={confirmDelete}
+        />
+      )}
 
       {showForm && (
         <SupplierForm

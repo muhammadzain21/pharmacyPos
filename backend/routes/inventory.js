@@ -2,6 +2,21 @@ const express = require('express');
 const router = express.Router();
 const Inventory = require('../models/Inventory');
 
+// Search inventory items
+router.get('/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || typeof q !== 'string') {
+      return res.status(400).json({ error: 'q query param required' });
+    }
+    const regex = new RegExp(q, 'i');
+    const items = await Inventory.find({ name: regex });
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get all inventory items
 router.get('/', async (req, res) => {
   try {
@@ -28,6 +43,22 @@ router.post('/', async (req, res) => {
     const newItem = new Inventory(req.body);
     const savedItem = await newItem.save();
     res.status(201).json(savedItem);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Patch stock quantity for an item
+router.patch('/:id/stock', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { change } = req.body;
+    if (typeof change !== 'number') {
+      return res.status(400).json({ error: 'change must be a number' });
+    }
+    const updated = await Inventory.findByIdAndUpdate(id, { $inc: { stock: change } }, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Item not found' });
+    res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

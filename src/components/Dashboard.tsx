@@ -132,7 +132,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
         getTotalInventory(),
         getLowStockItems(),
         getOutOfStockItems(),
-        fetch('http://localhost:5000/api/inventory').then(res => res.ok ? res.json() : [])
+        fetch('http://localhost:5000/api/add-stock').then(res => res.ok ? res.json() : [])
       ]);
 
       if (!summaryResponse.ok) {
@@ -141,7 +141,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
 
       const summaryData = await summaryResponse.json();
       const totalStockValue = inventoryItems.reduce((sum: number, item: any) => 
-        sum + (item.stock * (item.price || 0)), 0);
+        sum + ((item.quantity ?? item.stock ?? 0) * (item.unitPrice ?? item.price ?? 0)), 0);
 
       setStats({
         todaySales: summaryData.today.totalAmount,
@@ -165,6 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
     
     const handleSaleCompleted = () => {
       fetchDashboardData();
+      loadRecentSales();
     };
     window.addEventListener('saleCompleted', handleSaleCompleted);
 
@@ -252,13 +253,24 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
   // Load recent sales on component mount and set up refresh functionality
   const [isRefreshing, setIsRefreshing] = useState(false);
   
-  const loadRecentSales = () => {
+  const loadRecentSales = async () => {
     setIsRefreshing(true);
     try {
-      const savedSales = getRecentSales();
-      setRecentSales(savedSales);
-    } catch (error) {
-      console.error('Error loading recent sales:', error);
+      try {
+        const res = await fetch('http://localhost:5000/api/sales/recent');
+        if (res.ok) {
+          const apiSales = await res.json();
+          setRecentSales(apiSales);
+        } else {
+          // fallback to localStorage if backend fails
+          const savedSales = getRecentSales();
+          setRecentSales(savedSales);
+        }
+      } catch (err) {
+        console.error('Error fetching recent sales:', err);
+        const savedSales = getRecentSales();
+        setRecentSales(savedSales);
+      }
     } finally {
       setIsRefreshing(false);
     }
@@ -288,18 +300,16 @@ const Dashboard: React.FC<DashboardProps> = ({ isUrdu }) => {
 
   // Load expiring medicines from inventory
   React.useEffect(() => {
-    const updateExpiring = () => {
+    const updateExpiring = async () => {
       try {
-        const inventory = (window as any).getInventory
-          ? (window as any).getInventory()
-          : require('@/utils/inventoryService').getInventory();
+        const inventory = await getInventory();
         const expiring = inventory
           .filter((item: any) => isExpiringSoon(item.expiryDate))
           .map((item: any) => ({
             id: item.id,
             medicine: item.name,
             expiry: item.expiryDate,
-            stock: item.stock
+            stock: item.quantity ?? item.stock
           }))
           .sort((a: any, b: any) => new Date(a.expiry).getTime() - new Date(b.expiry).getTime());
         setExpiringMedicines(expiring);

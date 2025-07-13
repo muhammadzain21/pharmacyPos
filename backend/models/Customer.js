@@ -11,6 +11,21 @@ const customerSchema = new mongoose.Schema({
   customerSince: { type: Date, default: Date.now },
   totalPurchases: { type: Number, default: 0 },
   loyaltyPoints: { type: Number, default: 0 },
+  creditHistory: [
+    {
+      medicines: [
+        {
+          medicineId: { type: mongoose.Schema.Types.ObjectId, ref: 'Inventory' },
+          name: String,
+          quantity: Number,
+          price: Number
+        }
+      ],
+      amount: { type: Number },
+      date: { type: Date, default: Date.now },
+      paid: { type: Boolean, default: false }
+    }
+  ],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Customer', customerSchema);

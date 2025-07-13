@@ -4,6 +4,7 @@ const Sale = require('../models/Sale');
 const DailySale = require('../models/DailySale');
 const MonthlySale = require('../models/MonthlySale');
 const Inventory = require('../models/Inventory');
+const Customer = require('../models/Customer');
 
 // Get all sales
 router.get('/', async (req, res) => {
@@ -24,7 +25,7 @@ router.post('/', async (req, res) => {
     // Update inventory for each item in the sale
     for (const item of savedSale.items) {
       await Inventory.findByIdAndUpdate(item.medicineId, {
-        $inc: { quantity: -item.quantity },
+        $inc: { stock: -item.quantity },
       });
     }
 
@@ -54,6 +55,24 @@ router.post('/', async (req, res) => {
       },
       { upsert: true, new: true }
     );
+
+    // If credit sale, add credit history to customer
+    if (savedSale.paymentMethod === 'credit' && savedSale.customerId) {
+      try {
+        await Customer.findByIdAndUpdate(savedSale.customerId, {
+          $push: {
+            creditHistory: {
+              medicines: savedSale.items.map(it => ({ medicineId: it.medicineId, quantity: it.quantity, price: it.price })),
+              amount: savedSale.totalAmount,
+              date: savedSale.date,
+              paid: false
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Failed to add credit history:', err);
+      }
+    }
 
     res.status(201).json(savedSale);
   } catch (err) {
@@ -96,6 +115,30 @@ router.get('/monthly', async (req, res) => {
   try {
     const monthlySales = await MonthlySale.find().sort({ month: -1 });
     res.json(monthlySales);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get recent sales (latest 5)
+router.get('/recent', async (req, res) => {
+  try {
+    const sales = await Sale.find()
+      .sort({ date: -1 })
+      .limit(5)
+      .populate('items.medicineId', 'name')
+      .lean();
+
+    const formatted = sales.map(s => ({
+      id: s._id,
+      medicine: s.items.map(it => it.medicineId?.name || 'Unknown').join(', '),
+      customer: s.customerId || 'Walk-in',
+      amount: s.totalAmount,
+      date: new Date(s.date).toLocaleDateString(),
+      time: new Date(s.date).toLocaleTimeString()
+    }));
+
+    res.json(formatted);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

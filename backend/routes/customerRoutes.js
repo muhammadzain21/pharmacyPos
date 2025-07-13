@@ -16,7 +16,10 @@ router.get('/', async (req, res) => {
 // POST /api/customers - add new customer
 router.post('/', async (req, res) => {
   try {
-    const customer = new Customer(req.body);
+    const data = { ...req.body };
+    delete data._id;
+    delete data.id;
+    const customer = new Customer(data);
     await customer.save();
     res.status(201).json(customer);
   } catch (err) {
@@ -28,7 +31,10 @@ router.post('/', async (req, res) => {
 // PUT /api/customers/:id - update customer
 router.put('/:id', async (req, res) => {
   try {
-    const updated = await Customer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updateData = { ...req.body };
+    delete updateData._id;
+    delete updateData.id;
+    const updated = await Customer.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!updated) return res.status(404).json({ message: 'Customer not found' });
     res.json(updated);
   } catch (err) {

@@ -40,6 +40,22 @@ router.get('/', async (req, res) => {
   }
 });
 
+// PATCH /api/add-stock/:id/quantity - Adjust quantity (increment/decrement)
+router.patch('/:id/quantity', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { change } = req.body;
+    if (typeof change !== 'number') {
+      return res.status(400).json({ error: 'change must be a number' });
+    }
+    const updated = await AddStock.findByIdAndUpdate(id, { $inc: { quantity: change } }, { new: true });
+    if (!updated) return res.status(404).json({ error: 'Record not found' });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to adjust quantity', details: error.message });
+  }
+});
+
 // PUT /api/add-stock/:id - Update a stock record
 router.put('/:id', async (req, res) => {
   try {

@@ -19,7 +19,7 @@ import {
   Star
 } from 'lucide-react';
 import CustomerForm from './CustomerForm';
-import { offlineManager } from '../utils/offlineManager';
+import { customerApi } from '@/api/customerApi';
 import { loyaltyManager } from '../utils/loyaltyManager';
 import { reportExporter } from '../utils/reportExporter';
 
@@ -32,34 +32,8 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [customers, setCustomers] = useState([
-    {
-      id: 1,
-      name: 'Ahmad Hassan',
-      phone: '+92-300-1234567',
-      email: 'ahmad.hassan@gmail.com',
-      address: 'House 123, Block A, Gulshan-e-Iqbal, Karachi',
-      cnic: '42101-1234567-1',
-      notes: 'Regular customer, prefers generic medicines',
-      mrNumber: 'MR-001',
-      createdAt: '2023-01-15',
-      totalPurchases: 25,
-      loyaltyPoints: 1250
-    },
-    {
-      id: 2,
-      name: 'Fatima Khan',
-      phone: '+92-333-9876543',
-      email: 'fatima.khan@hotmail.com',
-      address: 'Flat 42, Block C, DHA Phase 5, Lahore',
-      cnic: '35202-7654321-9',
-      notes: 'Allergic to penicillin',
-      mrNumber: 'MR-002',
-      createdAt: '2023-02-20',
-      totalPurchases: 18,
-      loyaltyPoints: 900
-    }
-  ]);
+  const [customers, setCustomers] = useState<any[]>([]);
+// Customers will be fetched from backend on mount
 
   const text = {
     en: {
@@ -108,16 +82,18 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
 
   // Load customers from offline storage on mount
   useEffect(() => {
-    const storedCustomers = offlineManager.getData('customers');
-    if (storedCustomers && storedCustomers.length > 0) {
-      setCustomers(storedCustomers);
-    }
+    (async () => {
+      try {
+        const data = await customerApi.getAll();
+        setCustomers(data.map((c: any) => ({ ...c, id: c._id })));
+      } catch (err) {
+        console.error('Error fetching customers', err);
+      }
+    })();
   }, []);
 
   // Save customers to offline storage whenever customers change
-  useEffect(() => {
-    offlineManager.saveData('customers', customers);
-  }, [customers]);
+  
 
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -125,18 +101,17 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
     customer.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSaveCustomer = (customerData: any) => {
-    if (editingCustomer) {
-      setCustomers(customers.map(c => c.id === customerData.id ? customerData : c));
-    } else {
-      const newCustomer = {
-        ...customerData,
-        id: Math.max(...customers.map(c => c.id), 0) + 1,
-        createdAt: new Date().toISOString().split('T')[0],
-        totalPurchases: 0,
-        loyaltyPoints: 0
-      };
-      setCustomers([...customers, newCustomer]);
+  const handleSaveCustomer = async (customerData: any) => {
+    try {
+      if (editingCustomer) {
+        await customerApi.update(editingCustomer._id || editingCustomer.id, customerData);
+      } else {
+        await customerApi.create(customerData);
+      }
+      const data = await customerApi.getAll();
+      setCustomers(data.map((c: any) => ({ ...c, id: c._id })));
+    } catch (err) {
+      console.error('Error saving customer', err);
     }
     setEditingCustomer(null);
     setShowForm(false);
@@ -147,8 +122,13 @@ const CustomerManagement: React.FC<CustomerManagementProps> = ({ isUrdu }) => {
     setShowForm(true);
   };
 
-  const handleDeleteCustomer = (customerId: number) => {
-    setCustomers(customers.filter(c => c.id !== customerId));
+  const handleDeleteCustomer = async (customerId: string) => {
+    try {
+      await customerApi.remove(customerId);
+      setCustomers(customers.filter(c => c.id !== customerId));
+    } catch (err) {
+      console.error('Error deleting customer', err);
+    }
     if (selectedCustomer?.id === customerId) {
       setSelectedCustomer(null);
     }
