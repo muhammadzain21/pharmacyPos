@@ -85,4 +85,83 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// BULK IMPORT CSV/Excel converted JSON
+router.post('/bulk', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'items array required' });
+    }
+
+    const inserted = [];
+
+    let skipped = 0;
+  for (const row of items) {
+      // Support various header casings from CSV (e.g. exported file)
+      const medicineName = row.medicine || row.Medicine || row['Medicine Name'] || row['medicine name'] || row.name || row.Name;
+      const quantityVal = row.quantity || row.Quantity || row.stock || row.Stock;
+      const unitPriceVal = row.unitPrice || row.UnitPrice || row['Unit Price'];
+      let supplierName = row.supplier || row.Supplier || row['Supplier Name'];
+      if (!supplierName || supplierName.trim() === '') {
+        supplierName = 'Unknown Supplier';
+      }
+      const expiryDate = row.expiryDate || row.ExpiryDate || row['Expiry Date'] || row.expiry;
+      const minStock = row.minStock || row.MinStock || row['Min Stock'] || row.min;
+
+      // Ensure required
+      if (!medicineName || !quantityVal || !unitPriceVal || !supplierName) {
+        skipped++;
+        continue; // skip invalid rows
+      }
+
+      // Find or create medicine
+      let med = await Medicine.findOne({ name: medicineName.trim() });
+      if (!med) {
+        med = new Medicine({ name: medicineName.trim() });
+        await med.save();
+      }
+
+      // Find or create supplier
+      let sup = await Supplier.findOne({ name: supplierName.trim() });
+      if (!sup) {
+        sup = new Supplier({ name: supplierName.trim() });
+        await sup.save();
+      }
+
+      const addStock = new AddStock({
+        medicine: med._id,
+        quantity: parseInt(quantityVal, 10) || 0,
+        unitPrice: parseFloat(unitPriceVal) || 0,
+        supplier: sup._id,
+        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
+        minStock: minStock ? parseInt(minStock, 10) : undefined,
+      });
+      await addStock.save();
+      inserted.push(addStock);
+    }
+
+    res.json({ inserted: inserted.length, skipped });
+  } catch (error) {
+    res.status(500).json({ error: 'Bulk import failed', details: error.message });
+  }
+});
+
+// EXPORT to CSV
+router.get('/export', async (_req, res) => {
+  try {
+    const records = await AddStock.find().populate('medicine supplier');
+
+    let csv = 'Medicine,Quantity,UnitPrice,Supplier,ExpiryDate,MinStock\n';
+    records.forEach(r => {
+      csv += `${r.medicine.name},${r.quantity},${r.unitPrice},${r.supplier.name},${r.expiryDate ? new Date(r.expiryDate).toISOString().split('T')[0] : ''},${r.minStock || ''}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="addstock_export.csv"');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: 'Export failed', details: error.message });
+  }
+});
+
 module.exports = router;

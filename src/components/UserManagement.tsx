@@ -4,78 +4,76 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
+import * as userService from '@/services/userService';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface User {
-  id: number;
-  username: string;
-  name: string;
-  role: 'admin' | 'pharmacist' | 'cashier';
-  password: string;
+  _id: string;
+  email: string;
+  role: 'admin' | 'pharmacist' | 'cashier' | 'user';
 }
 
-const USER_STORAGE_KEY = 'pharmacy_users';
-
-const defaultUsers: User[] = [
-  { id: 1, username: 'admin', name: 'Administrator', role: 'admin', password: 'admin' },
-  { id: 2, username: 'pharmacist', name: 'Pharmacist', role: 'pharmacist', password: 'pharmacist' },
-  { id: 3, username: 'cashier', name: 'Cashier', role: 'cashier', password: 'cashier' },
-];
-
-function getUsers(): User[] {
-  const saved = localStorage.getItem(USER_STORAGE_KEY);
-  return saved ? JSON.parse(saved) : defaultUsers;
-}
-
-function saveUsers(users: User[]) {
-  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(users));
-}
-
-const UserManagement: React.FC<{ currentUser: User }> = ({ currentUser }) => {
-  const [users, setUsers] = useState<User[]>(getUsers());
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editData, setEditData] = useState<Partial<User>>({});
-  const [newUser, setNewUser] = useState<Partial<User>>({ username: '', name: '', role: 'cashier', password: '' });
-  const [changeOwnPassword, setChangeOwnPassword] = useState(false);
-  const [ownPassword, setOwnPassword] = useState('');
-  const [ownNewPassword, setOwnNewPassword] = useState('');
+const UserManagement: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Partial<User & { password?: string }>>({});
+  const [newUser, setNewUser] = useState<{ email: string; password: string; role: User['role'] }>({ email: '', password: '', role: 'cashier' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   useEffect(() => {
-    saveUsers(users);
-  }, [users]);
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    setLoading(true);
+    try {
+      const data = await userService.getUsers();
+      setUsers(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch users');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleEdit = (user: User) => {
-    setEditingId(user.id);
+    setEditingId(user._id);
     setEditData({ ...user });
   };
 
-  const handleEditSave = () => {
-    setUsers(users.map(u => u.id === editingId ? { ...u, ...editData } as User : u));
-    setEditingId(null);
-    setEditData({});
+  const handleEditSave = async () => {
+    if (!editingId) return;
+    try {
+      await userService.updateUser(editingId, editData);
+      setEditingId(null);
+      setEditData({});
+      fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update user');
+    }
   };
 
-  const handleAddUser = () => {
-    if (!newUser.username || !newUser.password || !newUser.name) return;
-    const id = users.length ? Math.max(...users.map(u => u.id)) + 1 : 1;
-    setUsers([...users, { ...newUser, id } as User]);
-    setNewUser({ username: '', name: '', role: 'cashier', password: '' });
+  const handleAddUser = async () => {
+    if (!newUser.email || !newUser.password) return;
+    try {
+      await userService.createUser(newUser);
+      setNewUser({ email: '', password: '', role: 'cashier' });
+      fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create user');
+    }
   };
 
-  const handleDelete = (id: number) => {
-    if (id === currentUser.id) return;
-    setUsers(users.filter(u => u.id !== id));
-  };
-
-  const handleOwnPasswordChange = () => {
-    if (!ownPassword || !ownNewPassword) return;
-    setUsers(users.map(u =>
-      u.id === currentUser.id && u.password === ownPassword
-        ? { ...u, password: ownNewPassword }
-        : u
-    ));
-    setOwnPassword('');
-    setOwnNewPassword('');
-    setChangeOwnPassword(false);
+  const handleDelete = async (id: string) => {
+    try {
+      await userService.deleteUser(id);
+      fetchUsers();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete user');
+    }
   };
 
   return (
@@ -85,115 +83,112 @@ const UserManagement: React.FC<{ currentUser: User }> = ({ currentUser }) => {
           <CardTitle>User Management</CardTitle>
         </CardHeader>
         <CardContent>
+          {error && <div className="text-red-600 mb-2">{error}</div>}
           <h2 className="font-semibold mb-2">All Users</h2>
-          <table className="w-full mb-4 border text-left">
-            <thead>
-              <tr>
-                <th className="p-2 border">Username</th>
-                <th className="p-2 border">Name</th>
-                <th className="p-2 border">Role</th>
-                <th className="p-2 border">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(user => (
-                <tr key={user.id}>
-                  <td className="p-2 border">{user.username}</td>
-                  <td className="p-2 border">{editingId === user.id ? (
-                    <Input
-                      value={editData.name as string}
-                      onChange={e => setEditData({ ...editData, name: e.target.value })}
-                    />
-                  ) : user.name}</td>
-                  <td className="p-2 border">{editingId === user.id ? (
-                    <Select value={editData.role as string} onValueChange={val => setEditData({ ...editData, role: val as User['role'] })}>
-  <SelectTrigger className="w-[120px]">
-    <SelectValue placeholder="Role" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="admin">Admin</SelectItem>
-    <SelectItem value="pharmacist">Pharmacist</SelectItem>
-    <SelectItem value="cashier">Cashier</SelectItem>
-  </SelectContent>
-</Select>
-                  ) : user.role}</td>
-                  <td className="p-2 border space-x-1">
-                    {editingId === user.id ? (
-                      <>
-                        <Button size="sm" onClick={handleEditSave}>Save</Button>
-                        <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
-                        <Input
-                          placeholder="New Password"
-                          type="password"
-                          value={editData.password || ''}
-                          onChange={e => setEditData({ ...editData, password: e.target.value })}
-                          className="mt-1"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Button size="sm" onClick={() => handleEdit(user)}>Edit</Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(user.id)} disabled={user.id === currentUser.id}>Delete</Button>
-                      </>
-                    )}
-                  </td>
+          {loading ? (
+            <div>Loading...</div>
+          ) : (
+            <table className="w-full mb-4 border text-left">
+              <thead>
+                <tr>
+                  <th className="p-2 border">Email</th>
+                  <th className="p-2 border">Role</th>
+                  <th className="p-2 border">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {users.map(user => (
+                  <tr key={user._id}>
+                    <td className="p-2 border">{editingId === user._id ? (
+                      <Input
+                        value={editData.email || ''}
+                        onChange={e => setEditData({ ...editData, email: e.target.value })}
+                      />
+                    ) : user.email}</td>
+                    <td className="p-2 border">{editingId === user._id ? (
+                      <Select value={editData.role as string} onValueChange={val => setEditData({ ...editData, role: val as User['role'] })}>
+                        <SelectTrigger className="w-[120px]">
+                          <SelectValue placeholder="Role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="pharmacist">Pharmacist</SelectItem>
+                          <SelectItem value="cashier">Cashier</SelectItem>
+                          <SelectItem value="user">User</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : user.role}</td>
+                    <td className="p-2 border">
+                      {editingId === user._id ? (
+                        <>
+                          <Button size="sm" onClick={handleEditSave}>Save</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
+                          <div className="relative mt-1">
+                            <Input
+                              placeholder="New Password (optional)"
+                              type={showEditPassword ? "text" : "password"}
+                              value={editData.password || ''}
+                              onChange={e => setEditData({ ...editData, password: e.target.value })}
+                            />
+                            <button
+                              type="button"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+                              onClick={() => setShowEditPassword(v => !v)}
+                              tabIndex={-1}
+                            >
+                              {showEditPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Button size="sm" onClick={() => handleEdit(user)}>Edit</Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleDelete(user._id)}>Delete</Button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
           <h2 className="font-semibold mb-2">Add New User</h2>
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-col gap-2 mb-4">
             <Input
-              placeholder="Username"
-              value={newUser.username || ''}
-              onChange={e => setNewUser({ ...newUser, username: e.target.value })}
+              placeholder="Email"
+              value={newUser.email}
+              onChange={e => setNewUser({ ...newUser, email: e.target.value })}
             />
-            <Input
-              placeholder="Name"
-              value={newUser.name || ''}
-              onChange={e => setNewUser({ ...newUser, name: e.target.value })}
-            />
-            <Select value={newUser.role as string} onValueChange={val => setNewUser({ ...newUser, role: val as User['role'] })}>
-  <SelectTrigger className="w-[120px]">
-    <SelectValue placeholder="Role" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="admin">Admin</SelectItem>
-    <SelectItem value="pharmacist">Pharmacist</SelectItem>
-    <SelectItem value="cashier">Cashier</SelectItem>
-  </SelectContent>
-</Select>
-            <Input
-              placeholder="Password"
-              type="password"
-              value={newUser.password || ''}
-              onChange={e => setNewUser({ ...newUser, password: e.target.value })}
-            />
+            <Select value={newUser.role} onValueChange={val => setNewUser({ ...newUser, role: val as User['role'] })}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="pharmacist">Pharmacist</SelectItem>
+                <SelectItem value="cashier">Cashier</SelectItem>
+                <SelectItem value="user">User</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <Input
+                placeholder="Password"
+                type={showNewUserPassword ? "text" : "password"}
+                value={newUser.password}
+                onChange={e => setNewUser({ ...newUser, password: e.target.value })}
+              />
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+                onClick={() => setShowNewUserPassword(v => !v)}
+                tabIndex={-1}
+              >
+                {showNewUserPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             <Button onClick={handleAddUser}>Add User</Button>
           </div>
-
-          <h2 className="font-semibold mb-2">Change Own Password</h2>
-          {!changeOwnPassword ? (
-            <Button onClick={() => setChangeOwnPassword(true)}>Change Password</Button>
-          ) : (
-            <div className="flex flex-wrap gap-2 items-center">
-              <Input
-                placeholder="Current Password"
-                type="password"
-                value={ownPassword}
-                onChange={e => setOwnPassword(e.target.value)}
-              />
-              <Input
-                placeholder="New Password"
-                type="password"
-                value={ownNewPassword}
-                onChange={e => setOwnNewPassword(e.target.value)}
-              />
-              <Button onClick={handleOwnPasswordChange}>Save</Button>
-              <Button variant="secondary" onClick={() => setChangeOwnPassword(false)}>Cancel</Button>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

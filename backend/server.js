@@ -40,6 +40,7 @@ const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/pharmacy';
     // Global staff settings
     app.use('/api/staff-settings', require('./routes/staffSettings'));
     app.use('/api/staff', require('./routes/staffRoutes'));
+    app.use('/api/users', require('./routes/userRoutes'));
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

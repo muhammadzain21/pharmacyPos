@@ -111,24 +111,22 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // Role-based menu filtering
   let allowedIds: string[] = [];
+  let showLogoutAfterId: string | null = null;
   switch ((currentUser?.role || '').toLowerCase()) {
     case 'cashier':
-      allowedIds = ['dashboard', 'pos'];
+      allowedIds = ['dashboard', 'pos', 'inventory'];
+      showLogoutAfterId = 'inventory';
       break;
     case 'pharmacist':
       allowedIds = [
         'dashboard',
-                'medicine-database',
+        'pos',
         'inventory',
-        'prescriptions',
         'customers',
         'suppliers',
-        
-        'staff-attendance',
-        'returns',
-        'reports',
-        'pos'
+        'reports'
       ];
+      showLogoutAfterId = 'reports';
       break;
     case 'admin':
       allowedIds = allMenuItems.map(item => item.id);
@@ -146,6 +144,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     ];
   }
   const menuItems = menu;
+
+  // Helper to handle logout and redirect
+  const handleLogoutClick = () => {
+    onLogout();
+    window.location.hash = '#/login';
+  };
 
   return (
     <div className="w-64 bg-white shadow-lg border-r border-gray-200 flex flex-col">
@@ -166,33 +170,47 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Menu */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuItems.map((item) => {
+        {menuItems.map((item, idx) => {
           const Icon = item.icon;
           return (
-            <Button
-              key={item.id}
-              variant={activeModule === item.id ? "default" : "ghost"}
-              className={`w-full justify-start ${isUrdu ? 'flex-row-reverse' : ''}`}
-              onClick={() => setActiveModule(item.id)}
-            >
-              <Icon className={`h-4 w-4 ${isUrdu ? 'ml-2' : 'mr-2'}`} />
-              {item.label}
-            </Button>
+            <React.Fragment key={item.id}>
+              <Button
+                variant={activeModule === item.id ? "default" : "ghost"}
+                className={`w-full justify-start ${isUrdu ? 'flex-row-reverse' : ''}`}
+                onClick={() => setActiveModule(item.id)}
+              >
+                <Icon className={`h-4 w-4 ${isUrdu ? 'ml-2' : 'mr-2'}`} />
+                {item.label}
+              </Button>
+              {/* Insert logout button after the specified menu item for cashier/pharmacist */}
+              {showLogoutAfterId === item.id && (
+                <Button
+                  variant="outline"
+                  className={`w-full mt-2 ${isUrdu ? 'flex-row-reverse' : ''}`}
+                  onClick={handleLogoutClick}
+                >
+                  <LogOut className={`h-4 w-4 ${isUrdu ? 'ml-2' : 'mr-2'}`} />
+                  {t.logout}
+                </Button>
+              )}
+            </React.Fragment>
           );
         })}
       </nav>
 
-      {/* Logout Button */}
-      <div className="p-4 border-t border-gray-200">
-        <Button 
-          variant="outline" 
-          className={`w-full ${isUrdu ? 'flex-row-reverse' : ''}`}
-          onClick={onLogout}
-        >
-          <LogOut className={`h-4 w-4 ${isUrdu ? 'ml-2' : 'mr-2'}`} />
-          {t.logout}
-        </Button>
-      </div>
+      {/* Logout Button for admin at the bottom */}
+      {((currentUser?.role || '').toLowerCase() === 'admin') && (
+        <div className="p-4 border-t border-gray-200">
+          <Button 
+            variant="outline" 
+            className={`w-full ${isUrdu ? 'flex-row-reverse' : ''}`}
+            onClick={handleLogoutClick}
+          >
+            <LogOut className={`h-4 w-4 ${isUrdu ? 'ml-2' : 'mr-2'}`} />
+            {t.logout}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

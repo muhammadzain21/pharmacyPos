@@ -19,21 +19,6 @@ export const saveUsers = (users: User[]): void => {
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 };
 
-export const ensureDefaultAdmin = (): void => {
-  const users = getUsers();
-  const hasAdmin = users.some(u => u.email === 'admin@gmail.com');
-  if (!hasAdmin) {
-    users.push({
-      id: uuid(),
-      email: 'admin@gmail.com',
-      password: 'admin1234',
-      name: 'Administrator',
-      role: 'admin',
-    });
-    saveUsers(users);
-  }
-};
-
 export const authenticateUser = (
   email: string,
   password: string,

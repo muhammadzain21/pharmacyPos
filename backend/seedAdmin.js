@@ -11,7 +11,7 @@ const User = require('./models/User');
     });
 
     const email = 'admin@gmail.com';
-    const password = 'admin1234';
+    const password = 'admin1122';
     const role = 'admin';
 
     const existing = await User.findOne({ email });

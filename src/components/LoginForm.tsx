@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ShieldCheck, Pill } from 'lucide-react';
-import { ensureDefaultAdmin, authenticateUser } from '@/utils/userStorage';
+import { loginUser } from '@/services/userService';
 import { useAuditLog } from '@/contexts/AuditLogContext';
 
 interface LoginFormProps {
@@ -38,19 +38,16 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, isUrdu, setIsUrdu }) => 
     },
   }[isUrdu ? 'ur' : 'en'];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // make sure default admin exists
-    ensureDefaultAdmin();
-
-    const user = authenticateUser(email, password);
-    if (user) {
+    try {
+      const user = await loginUser(email, password);
       onLogin(user);
-      logAction('LOGIN', isUrdu ? `${user.name} نے لاگ ان کیا` : `${user.name} logged in`, 'user', user.id);
-    } else {
-      alert(t.invalid);
+      logAction('LOGIN', isUrdu ? `${user.email} نے لاگ ان کیا` : `${user.email} logged in`, 'user', user._id || user.id);
+    } catch (err: any) {
+      alert(err.message || t.invalid);
     }
 
     setLoading(false);

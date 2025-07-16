@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 import * as Papa from 'papaparse';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -28,19 +29,40 @@ const BulkImportDialog: React.FC<BulkImportDialogProps> = ({ onImported }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    Papa.parse<CsvRow>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: results => {
-        setRows(results.data);
-      },
-    });
-  };
+
+    const extension = file.name.split('.').pop()?.toLowerCase();
+
+    if (extension === 'csv') {
+      Papa.parse<CsvRow>(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: results => setRows(results.data as CsvRow[]),
+      });
+    } else if (extension === 'xlsx' || extension === 'xls') {
+      const reader = new FileReader();
+      reader.onload = evt => {
+        const data = evt.target?.result;
+        if (!data) return;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json: CsvRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        setRows(json);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      toast({ title: 'Unsupported file', description: 'Please select a CSV or Excel (.xlsx) file', variant: 'destructive' });
+    }
+  }
 
   const handleConfirm = async () => {
     try {
-      await axios.post('/api/inventory/bulk', { items: rows });
-      toast({ title: 'Success', description: 'File imported, items awaiting approval' });
+      const res = await axios.post('/api/add-stock/bulk', { items: rows });
+      const { inserted, skipped } = res.data;
+      if (inserted === 0) {
+        toast({ title: 'Nothing imported', description: 'No valid rows found to import', variant: 'destructive' });
+      } else {
+        toast({ title: 'Import complete', description: `${inserted} row(s) imported (${skipped} skipped)` });
+      }
       setRows([]);
       setOpen(false);
       onImported();
@@ -58,7 +80,7 @@ const BulkImportDialog: React.FC<BulkImportDialogProps> = ({ onImported }) => {
         <DialogHeader>
           <DialogTitle>Bulk Import Inventory</DialogTitle>
         </DialogHeader>
-        <input type="file" accept=".csv" onChange={handleFileChange} />
+        <input type="file" accept=".csv,.xlsx" onChange={handleFileChange} />
         {rows.length > 0 && (
           <div className="max-h-64 overflow-auto border rounded-md mt-4">
             <Table>

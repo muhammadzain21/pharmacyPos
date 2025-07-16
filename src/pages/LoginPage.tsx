@@ -15,9 +15,9 @@ export default function LoginPage() {
     if (user.role === 'admin') {
       navigate('/dashboard', { replace: true });
     } else if (user.role === 'pharmacist') {
-      navigate('/pharmacist-dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } else if (user.role === 'cashier') {
-      navigate('/cashier-dashboard', { replace: true });
+      navigate('/dashboard', { replace: true });
     } else {
       navigate('/', { replace: true });
     }

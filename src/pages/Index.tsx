@@ -24,6 +24,7 @@ import ReturnsPage from '../components/ReturnsPage';
 import UserManagement from '../components/UserManagement';
 import { offlineManager } from '../utils/offlineManager';
 import { useAuditLog } from '../contexts/AuditLogContext';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
   // Load user from localStorage on initial render
@@ -33,8 +34,8 @@ const Index = () => {
   });
   
   const { logAction } = useAuditLog();
-  
-    const [activeModule, setActiveModule] = useState(() => {
+  const { logout } = useAuth();
+  const [activeModule, setActiveModule] = useState(() => {
     return localStorage.getItem('activeModule') || 'dashboard';
   });
 
@@ -56,61 +57,6 @@ const Index = () => {
     setCurrentUser(user);
     localStorage.setItem('pharmacy_user', JSON.stringify(user));
   };
-
-  // Handle user logout
-  const handleLogout = () => {
-    // Log the logout action before clearing user data
-    if (currentUser) {
-      logAction('LOGOUT', 
-        isUrdu ? `${currentUser.name} نے لاگ آؤٹ کیا` : `${currentUser.name} logged out`,
-        'user',
-        currentUser.id.toString()
-      );
-    }
-    
-    localStorage.removeItem('pharmacy_user');
-    localStorage.removeItem('activeModule');
-    setCurrentUser(null);
-    setActiveModule('dashboard');
-  };
-
-  // Initialize offline capabilities
-  useEffect(() => {
-    // Check for saved language preference
-    const savedLanguage = localStorage.getItem('pharmacy_language');
-    if (savedLanguage) {
-      setIsUrdu(savedLanguage === 'ur');
-    }
-
-    // Check for saved theme preference
-    const savedTheme = localStorage.getItem('pharmacy_theme');
-    if (savedTheme) {
-      setIsDarkMode(savedTheme === 'dark');
-    }
-
-    // Auto-detect language based on browser settings
-    if (!savedLanguage) {
-      const browserLanguage = navigator.language || navigator.languages[0];
-      if (browserLanguage.includes('ur') || browserLanguage.includes('pk')) {
-        setIsUrdu(true);
-      }
-    }
-  }, []);
-
-  // Save language preference
-  useEffect(() => {
-    localStorage.setItem('pharmacy_language', isUrdu ? 'ur' : 'en');
-  }, [isUrdu]);
-
-  // Save theme preference and apply to document
-  useEffect(() => {
-    localStorage.setItem('pharmacy_theme', isDarkMode ? 'dark' : 'light');
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
 
   // Enhanced login component with offline support
   if (!currentUser) {
@@ -171,7 +117,7 @@ const Index = () => {
       case 'user-management':
         // Only admin can access
         if (currentUser?.role === 'admin') {
-          return <UserManagement currentUser={currentUser} />;
+          return <UserManagement />;
         } else {
           return <div className="p-8 text-red-600 font-bold">Access Denied</div>;
         }
@@ -199,7 +145,17 @@ const Index = () => {
         activeModule={activeModule}
         setActiveModule={changeModule}
         currentUser={currentUser}
-        onLogout={handleLogout}
+        onLogout={() => {
+          const user = currentUser;
+          if (user) {
+            logAction('LOGOUT', 
+              isUrdu ? `${user.name} نے لاگ آؤٹ کیا` : `${user.name} logged out`,
+              'user',
+              user.id?.toString?.() || user._id?.toString?.() || ''
+            );
+          }
+          logout();
+        }}
         isUrdu={isUrdu}
       />
       <div className="flex-1 overflow-hidden">
@@ -223,3 +179,4 @@ const Index = () => {
 };
 
 export default Index;
+
