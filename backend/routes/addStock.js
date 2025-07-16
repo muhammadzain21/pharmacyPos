@@ -30,13 +30,39 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/add-stock - List all stock additions
-router.get('/', async (req, res) => {
+// GET /api/add-stock - List APPROVED stock additions (default inventory)
+router.get('/', async (_req, res) => {
   try {
-    const records = await AddStock.find().populate('medicine supplier');
+    const records = await AddStock.find({ status: 'approved' }).populate('medicine supplier');
     res.json(records);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch stock records', details: error.message });
+  }
+});
+
+// GET /api/add-stock/pending - List PENDING stock additions for review
+router.get('/pending', async (_req, res) => {
+  try {
+    const pending = await AddStock.find({ status: 'pending' }).populate('medicine supplier');
+    res.json(pending);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch pending records', details: error.message });
+  }
+});
+
+// PATCH /api/add-stock/:id/approve - mark pending record as approved
+router.patch('/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updated = await AddStock.findByIdAndUpdate(
+      id,
+      { status: 'approved' },
+      { new: true }
+    ).populate('medicine supplier');
+    if (!updated) return res.status(404).json({ error: 'Record not found' });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to approve record', details: error.message });
   }
 });
 

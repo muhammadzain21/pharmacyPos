@@ -27,6 +27,11 @@ const AddStockSchema = new mongoose.Schema({
     type: Number,
     required: false
   },
+  status: {
+    type: String,
+    enum: ['pending', 'approved'],
+    default: 'pending'
+  },
   date: {
     type: Date,
     default: Date.now

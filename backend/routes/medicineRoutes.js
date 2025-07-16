@@ -6,10 +6,10 @@ const Medicine = require('../models/Medicine');
 router.post('/', async (req, res) => {
   try {
     const { name, genericName } = req.body;
-    if (!name || !genericName) {
-      return res.status(400).json({ error: 'Name and generic name are required' });
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Name is required' });
     }
-    const medicine = new Medicine({ name, genericName });
+    const medicine = new Medicine({ name: name.trim(), genericName: genericName ? genericName.trim() : '' });
     await medicine.save();
     res.status(201).json(medicine);
   } catch (error) {

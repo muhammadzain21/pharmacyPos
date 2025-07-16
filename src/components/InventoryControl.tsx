@@ -40,14 +40,18 @@ interface AddStockDialogProps {
 export type SupplierType = { _id?: string; id?: string; name: string };
 
 import { getMedicines } from '@/utils/medicineService';
+
 import { getSuppliers } from '@/utils/supplierService';
 
 const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
   const [minStock, setMinStock] = useState<string>('');
   const [expiryDate, setExpiryDate] = useState<string>('');
   const [medicines, setMedicines] = useState<any[]>([]);
+  const [excelMedicineNames, setExcelMedicineNames] = useState<string[]>([]);
+  const [medicineInput, setMedicineInput] = useState<string>('');
   const [suppliers, setSuppliers] = useState<SupplierType[]>([]);
   const [selectedMedicine, setSelectedMedicine] = useState<any | null>(null);
+  const [medicineDropdownOpen, setMedicineDropdownOpen] = useState(false);
   const [stockQuantity, setStockQuantity] = useState<string>('');
   const [unitPrice, setUnitPrice] = useState<string>('');
   const [totalPrice, setTotalPrice] = useState<string>('');
@@ -68,6 +72,21 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
         const meds = await getMedicines();
         setMedicines(meds);
         const sups = await getSuppliers();
+
+        // Load medicine names from CSV (column B)
+        try {
+          const resCsv = await fetch('/medicine-database.csv');
+          const csvText = await resCsv.text();
+          const lines = csvText.split(/\r?\n/).slice(1); // skip header row
+          const names = lines.map(line => {
+            const cols = line.split(',');
+            return (cols[1] || '').replace(/"/g, '').trim();
+          }).filter(Boolean);
+          setExcelMedicineNames(names);
+        } catch (err) {
+          console.error('Failed to load medicine-database.csv', err);
+        }
+
         setSuppliers(sups as SupplierType[]);
       } catch (e) {
         toast({ title: 'Error', description: 'Failed to fetch medicines or suppliers', variant: 'destructive' });
@@ -91,21 +110,27 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
   };
 
   const handleAddMedicine = async () => {
-  if (!newMedicineName.trim() || !newGenericName.trim()) return;
-  try {
-    const res = await axios.post('/api/medicines', { name: newMedicineName, genericName: newGenericName });
-    setMedicines(prev => [...prev, res.data]);
-    setSelectedMedicine(res.data);
-    setShowNewMedicineField(false);
-    setNewMedicineName('');
-    setNewGenericName('');
-    toast({ title: 'Success', description: 'Medicine added' });
-  } catch (e) {
-    toast({ title: 'Error', description: 'Failed to add medicine', variant: 'destructive' });
+    if (!newMedicineName.trim()) {
+    toast({ title: 'Error', description: 'Medicine name required', variant: 'destructive' });
+    return;
   }
-};
+    try {
+      const payload: any = { name: newMedicineName };
+    if (newGenericName.trim()) payload.genericName = newGenericName;
+    const res = await axios.post('/api/medicines', payload);
+      setMedicines(prev => [...prev, res.data]);
+      setSelectedMedicine(res.data);
+    setMedicineInput(res.data.name);
+      setShowNewMedicineField(false);
+      setNewMedicineName('');
+      setNewGenericName('');
+      toast({ title: 'Success', description: 'Medicine added' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to add medicine', variant: 'destructive' });
+    }
+  };
 
-// sync prices helpers
+  // sync prices helpers
   const syncFromUnit = (qtyStr: string, unitStr: string) => {
     const q = parseFloat(qtyStr);
     const u = parseFloat(unitStr);
@@ -123,6 +148,11 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
 
   const handleAddStock = async () => {
     console.log("handleAddStock called", { selectedMedicine, stockQuantity, unitPrice });
+    // If medicine is not selected yet but user has opened the new-medicine inline form, attempt to create it now
+    if (!selectedMedicine && showNewMedicineField && newMedicineName.trim()) {
+      await handleAddMedicine();
+    }
+
     if (!selectedMedicine || !stockQuantity || !unitPrice) {
       toast({
         title: 'Error',
@@ -155,6 +185,26 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
     }
   };
 
+  // Compute suggestions based on input (show top 50)
+  const medicineSuggestions = React.useMemo(() => {
+    const list = medicines.map((m:any)=>m.name);
+    if (!medicineInput.trim()) return list.slice(0,50);
+    const lower = medicineInput.toLowerCase();
+    const combined = Array.from(new Set(medicines.map((m:any)=>m.name)));
+    return combined.filter(n=> n.toLowerCase().includes(lower)).slice(0,50);
+  }, [medicineInput, medicines]);
+
+  // Suggestions for inline Add Medicine form
+  const addMedicineSuggestions = React.useMemo(() => {
+    if (!newMedicineName.trim()) return [] as string[];
+    const lower = newMedicineName.toLowerCase();
+    const combined = Array.from(new Set([
+      ...medicines.map((m:any)=>m.name),
+      ...excelMedicineNames
+    ]));
+    return combined.filter(n=> n.toLowerCase().includes(lower)).slice(0,50);
+  }, [newMedicineName, medicines, excelMedicineNames]);
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -167,57 +217,87 @@ const AddStockDialog: React.FC<AddStockDialogProps> = ({ onStockAdded }) => {
           <DialogTitle className="text-3xl font-extrabold bg-gradient-to-r from-indigo-600 to-blue-500 bg-clip-text text-transparent flex items-center gap-2"><Package className="w-7 h-7" /> Add Inventory</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {/* Medicine selection */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
-            <Label htmlFor="medicine" className="text-right">
-              Medicine
-            </Label>
-            <Select 
-              value={selectedMedicine ? selectedMedicine._id || selectedMedicine.id : ''}
-              onValueChange={val => {
-                const med = medicines.find(m => m._id === val || m.id === val);
-                setSelectedMedicine(med);
+          {/* Medicine field with text + suggestions */}
+          <div className="md:col-span-2 relative">
+            <Label htmlFor="medicineInput">Medicine</Label>
+            <Input
+              id="medicineInput"
+              value={medicineInput}
+              onFocus={()=>setMedicineDropdownOpen(true)}
+               onBlur={()=> setTimeout(()=>setMedicineDropdownOpen(false),100)}
+               onChange={e=>{
+                setMedicineInput(e.target.value);
+                const med = medicines.find(m=> m.name.toLowerCase() === e.target.value.toLowerCase());
+                setSelectedMedicine(med || null);
               }}
-            >
-              <SelectTrigger className="sm:col-span-3">
-                <SelectValue placeholder="Select medicine" />
-              </SelectTrigger>
-              <SelectContent>
-                {medicines.map((item) => (
-                  <SelectItem key={String(item._id || item.id)} value={String(item._id || item.id)}>
-                    {item.name}
-                  </SelectItem>
+              placeholder="Type medicine name"
+              autoComplete="off"
+            />
+            {medicineDropdownOpen && medicineSuggestions.length > 0 && (
+              <div className="absolute z-50 bg-white border rounded w-full max-h-60 overflow-y-auto shadow">
+                {medicineSuggestions.map(name=> (
+                  <div
+                    key={name}
+                    className="px-3 py-1 hover:bg-gray-100 cursor-pointer"
+                    onClick={()=>{
+                      setMedicineInput(name);
+                      const med = medicines.find(m=> m.name.toLowerCase() === name.toLowerCase());
+                      setSelectedMedicine(med || null);
+                      setShowNewMedicineField(!med);
+                    }}
+                  >{name}</div>
                 ))}
-              </SelectContent>
-            </Select>
-            <div className="mt-2 flex gap-2 items-center">
-              <Button variant="outline" size="sm" onClick={() => setShowNewMedicineField(true)}>
-                + Add Medicine
-              </Button>
-            </div>
-            {showNewMedicineField && (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="Medicine Name"
-                  value={newMedicineName}
-                  onChange={e => setNewMedicineName(e.target.value)}
-                />
-                <Input
-                  placeholder="Generic Name"
-                  value={newGenericName}
-                  onChange={e => setNewGenericName(e.target.value)}
-                />
-                <Button
-                  className="col-span-2"
-                  size="sm"
-                  onClick={handleAddMedicine}
-                >
-                  Save Medicine
-                </Button>
               </div>
             )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                // open inline new-medicine inputs and pre-fill with current text
+                if (medicineInput && !showNewMedicineField) {
+                  setNewMedicineName(medicineInput);
+                }
+                setShowNewMedicineField(true);
+              }}
+              className="mt-2"
+            >
+              + Add Medicine
+            </Button>
           </div>
-          
+
+          {showNewMedicineField && (
+            <div className="relative mt-2 bg-blue-50/20 p-3 rounded-lg space-y-2">
+              <Label className="font-semibold">New Medicine</Label>
+              <Input
+                placeholder="Medicine Name"
+                value={newMedicineName}
+                onChange={e => setNewMedicineName(e.target.value)}
+              />
+              {newMedicineName && addMedicineSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 mt-10 bg-white border rounded max-h-60 overflow-y-auto shadow z-50">
+                  {addMedicineSuggestions.map(name => (
+                    <div
+                      key={name}
+                      className="px-3 py-1 hover:bg-gray-100 cursor-pointer"
+                      onClick={() => setNewMedicineName(name)}
+                    >
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Input
+                placeholder="Generic Name (optional)"
+                value={newGenericName}
+                onChange={e => setNewGenericName(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAddMedicine}>Save</Button>
+                <Button size="sm" variant="outline" onClick={() => setShowNewMedicineField(false)}>Cancel</Button>
+              </div>
+            </div>
+          )}
+
           {/* Quantity field */}
           <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4 bg-gray-50 rounded-md p-3 hover:bg-gray-100 transition">
             <Label htmlFor="quantity" className="text-right">
@@ -415,6 +495,76 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   // Use inventory from context
   const { inventory, addItemToInventory, refreshInventory } = useInventory();
+
+  // Pending inventory state (status = 'pending')
+  const [pendingInventory, setPendingInventory] = useState<InventoryItem[]>([]);
+
+  // Transform backend AddStock record into InventoryItem
+  const mapRecord = (record: any): InventoryItem => ({
+    id: record._id,
+    name: record.medicine?.name || record.name || '',
+    genericName: record.medicine?.genericName || record.genericName || '',
+    price: record.unitPrice || record.price || 0,
+    stock: record.quantity || record.stock || 0,
+    barcode: record.medicine?.barcode || record.barcode,
+    category: record.medicine?.category || record.category,
+    manufacturer: record.medicine?.manufacturer || record.manufacturer,
+    minStock: record.minStock,
+    maxStock: record.maxStock,
+    purchasePrice: record.unitPrice,
+    salePrice: record.salePrice ?? record.unitPrice ?? record.price,
+    batchNo: record.batchNo || record.batchNumber,
+    expiryDate: record.expiryDate,
+    manufacturingDate: undefined,
+    supplierName: undefined,
+    status: record.status ?? 'approved'
+  });
+
+  const loadPending = async () => {
+    try {
+      const res = await axios.get('/api/add-stock/pending');
+      setPendingInventory(res.data.map(mapRecord));
+    } catch (err) {
+      console.error('Failed to load pending inventory', err);
+    }
+  };
+
+  // initial load
+  useEffect(() => {
+    loadPending();
+  }, []);
+
+  // Refresh both approved and pending lists
+  const refreshAll = async () => {
+    await refreshInventory();
+    await loadPending();
+  };
+
+  const loadInventory = async () => {
+    await refreshAll();
+  };
+
+  const approveInventory = async (id: string) => {
+    try {
+      await axios.patch(`/api/add-stock/${id}/approve`);
+      toast({ title: 'Approved', description: 'Item moved to inventory' });
+      await refreshAll();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to approve item', variant: 'destructive' });
+    }
+  };
+
+  const rejectInventory = async (id: string) => {
+    if (!confirm('Delete this pending item?')) return;
+    try {
+      await axios.delete(`/api/add-stock/${id}`);
+      toast({ title: 'Deleted', description: 'Pending item removed' });
+      await refreshAll();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to delete item', variant: 'destructive' });
+    }
+  };
+
   const [formData, setFormData] = useState({
     name: '',
     genericName: '',
@@ -741,12 +891,14 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
 
   // Calculate inventory metrics
   const inventoryValue = inventory.reduce((sum, item) => sum + ((item.price || 0) * (item.stock || 0)), 0);
-    const lowStockCount = inventory.filter(item => (item.stock ?? 0) > 0 && (item.stock ?? 0) <= (item.minStock ?? 0)).length;
+  const lowStockCount = inventory.filter(item => (item.stock ?? 0) > 0 && (item.stock ?? 0) <= (item.minStock ?? 0)).length;
   const expiringCount = inventory.filter(item => isExpiringSoon(item.expiryDate)).length;
   const outOfStockCount = inventory.filter(item => (item.stock ?? 0) === 0).length;
 
   const filterInventory = () => {
-    const filteredItems = inventory.filter(item => {
+    // Base list depends on active tab
+    const baseList = activeTab === 'review' ? pendingInventory : inventory;
+    const filteredItems = baseList.filter(item => {
             const lowerSearch = searchTerm.trim().toLowerCase();
       const matchesSearch = lowerSearch === '' || (
         (item.name ?? '').toLowerCase().includes(lowerSearch) ||
@@ -759,6 +911,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
       if (activeTab === 'lowStock') return matchesSearch && (item.stock ?? 0) <= (item.minStock ?? 0);
       if (activeTab === 'expiring') return matchesSearch && isExpiringSoon(item.expiryDate ?? '');
       if (activeTab === 'outOfStock') return matchesSearch && (item.stock ?? 0) === 0;
+      if (activeTab === 'pending') return matchesSearch && (item.status ?? 'approved') === 'pending';
       
       return matchesSearch;
     });
@@ -805,29 +958,7 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     setDeleteTargetId(null);
   };
 
-  const loadInventory = async () => {
-    await refreshInventory();
-  };
 
-  const approveInventory = async (id: string | number) => {
-    try {
-      await axios.put(`/api/inventory/${id}`, { status: 'approved' });
-      await loadInventory();
-      toast({ title: 'Success', description: 'Inventory item approved' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to approve item', variant: 'destructive' });
-    }
-  };
-
-  const rejectInventory = async (id: string | number) => {
-    try {
-      await axios.put(`/api/inventory/${id}`, { status: 'rejected' });
-      await loadInventory();
-      toast({ title: 'Success', description: 'Inventory item rejected' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to reject item', variant: 'destructive' });
-    }
-  };
 
   return (
     <React.Fragment>
@@ -883,9 +1014,9 @@ const InventoryControl: React.FC<InventoryControlProps> = ({ isUrdu }) => {
     </Dialog>
     {/* Add Inventory Button */}
     <AddStockDialog 
-      onStockAdded={loadInventory}
+      onStockAdded={refreshAll}
     />
-    <BulkImportDialog onImported={loadInventory} />
+    <BulkImportDialog onImported={refreshAll} />
     <Button variant="outline" onClick={loadInventory}>
       <RefreshCw className="h-4 w-4 mr-2" />
       {t.refresh}
